@@ -1,0 +1,587 @@
+# Goal: maximise Australian PR likelihood (v1, Ratana, Sydney-based, searching all Australia)
+#
+# This file IS the rubric. The scorer has no rules of its own - change numbers
+# and phrases here, not in the code.
+# Source of truth: Notion "Job Search - Keywords & Filters" (PR Resources).
+
+goal:
+  id: pr_australia
+  name: Australian PR likelihood
+  owner_note: >
+    Take the most analytical job I can get, in the least IT-flavoured setting
+    I can find. The team decides the ANZSCO code, not the job title.
+
+# ---------------------------------------------------------------------------
+# Step 1 - knockouts. Any match scores 0 and moves the job to the Skipped list
+# with the matched phrase quoted in context, so a wrongly-firing rule is visible.
+# ---------------------------------------------------------------------------
+knockouts:
+  - id: citizens_only
+    reason: Citizens / permanent residents only
+    phrases:
+      - australian citizen
+      - australian citizenship
+      - citizens only
+      - permanent residents only
+      - must be a permanent resident
+      - pr only
+      - no visa sponsorship
+      - unable to sponsor
+      - we do not offer sponsorship
+
+  - id: security_clearance
+    reason: Security clearance required
+    phrases:
+      - security clearance
+      - nv1
+      - nv2
+      - baseline clearance
+      - baseline security
+      - afp clearance
+      - agsva
+
+  - id: government
+    reason: Government department or agency
+    phrases:
+      - nsw government
+      - vic government
+      - qld government
+      - victorian government
+      - queensland government
+      - wa government
+      - western australian government
+      - sa government
+      - south australian government
+      - tasmanian government
+      - act government
+      - nt government
+      - northern territory government
+      - australian government
+      - federal government
+      - state government
+      - local government
+      - department of
+      - transport for nsw
+      - service nsw
+      - city council
+      - shire council
+      - public service
+      - public sector agency
+      - statutory authority
+      - commonwealth agency
+    # Government as a *client*, not the employer. Blanked out before the
+    # phrases above are searched, so consultancies are kept.
+    ignore_phrases:
+      - working with local government
+      - working with state government
+      - working with government
+      - work with local government
+      - work with government
+      - government clients
+      - government and private sector
+      - government and corporate clients
+      - clients across government
+      - clients in government
+      - clients including government
+      # Government as the subject matter (SMS Integration builds council software).
+      - understanding of local government
+      - local government erp
+
+  - id: unpaid
+    reason: Unpaid / internship / "exposure"
+    phrases:
+      # Not bare "unpaid": it fired on "paid & unpaid parental leave" (TripADeal).
+      - unpaid role
+      - unpaid position
+      - unpaid opportunity
+      - this role is unpaid
+      - voluntary position
+      - volunteer role
+      - unpaid internship
+      - internship program
+      - internship opportunity
+      - work experience placement
+      - for exposure
+      - no remuneration
+    # Searched in the job title only. "Internship experience" in the body is
+    # usually the candidate's past, not the job on offer.
+    role_phrases:
+      - internship
+      - intern
+      - work experience
+
+  - id: too_senior
+    reason: Hard experience requirement (3+ years)
+    phrases:
+      - 3+ years
+      - 3 + years
+      - minimum 3 years
+      - minimum of 3 years
+      - at least 3 years
+      - 4+ years
+      - 5+ years
+      - minimum 5 years
+      - at least 5 years
+      - 5-7 years
+      - 7+ years
+
+  - id: senior_salary
+    reason: Salary suggests more experience than I have
+    # Midpoint of the stated range. Above $100k the ads expect several years
+    # of experience (was $130k until 26 Sep 2026; lowered at Ratana's call).
+    salary_above: 100000
+
+# ---------------------------------------------------------------------------
+# Flags - worth a warning on the card, but no points and no knockout.
+# ---------------------------------------------------------------------------
+flags:
+  - id: seek_ict_category
+    note: Seek lists this under ICT - ask which team it sits in
+    phrases:
+      - "seek category: information & communication technology"
+
+# ---------------------------------------------------------------------------
+# Step 2 - score out of 100
+# ---------------------------------------------------------------------------
+
+# --- ANZSCO fit: 45 points -------------------------------------------------
+# Built from three signals, in this order:
+#   1. is this an analyst-type occupation at all?  (off-target titles)
+#   2. which team does it sit in?                  (sets the code family)
+#   3. what language does the ad use?              (adjusts up or down)
+anzsco:
+  max_points: 45
+
+  codes:
+    target_a: "224711 Management Consultant"
+    target_b: "224712 Org & Methods Analyst"
+    statistician: "224113 Statistician"
+    ict: "ICT code (2611xx / 2613xx)"
+    unclear: "224711 / 224712 (team not stated)"
+
+  # 1. Occupation check. These titles are not 224711/224712/224113 work at all,
+  # whatever team they sit in, so the occupation check runs first.
+  off_target_titles:
+    points: 4
+    code: "no target-code match"
+    confidence: medium
+    phrases:
+      - trader
+      - trading
+      - portfolio manager
+      - software engineer
+      - software developer
+      - full stack
+      - front end developer
+      - back end developer
+      - devops
+      - site reliability
+      - data engineer
+      - machine learning engineer
+      - platform engineer
+      - security engineer
+      - solutions architect
+      - account manager
+      - sales representative
+      # Software testing is ICT work, whatever the title says about "analyst".
+      # "Quality Analyst" as a search keyword pulled all of these in.
+      - tester
+      - test analyst
+      - test engineer
+      - test lead
+      - test manager
+      - qa engineer
+      - qa analyst
+      - quality assurance
+      - quality engineer
+
+  # 2. Team signal. First family whose phrases appear wins.
+  teams:
+    - id: target
+      points: 30
+      code_ref: target_b
+      confidence: high
+      label: target team (Finance / Strategy / Ops / Risk / People / Research)
+      phrases:
+        - finance team
+        - finance division
+        - financial control
+        - commercial team
+        - strategy team
+        - strategy function
+        - corporate strategy
+        - office of the ceo
+        - chief executive
+        - operations team
+        - business operations
+        - operational excellence
+        - continuous improvement team
+        - business improvement
+        - transformation team
+        - risk team
+        - risk and compliance
+        - internal audit
+        - people and culture
+        - people team
+        - human resources
+        - hr team
+        - payroll team
+        - workforce team
+        - research team
+        - insights team
+        - policy team
+
+    - id: ict
+      points: 5
+      code_ref: ict
+      confidence: high
+      label: IT-flavoured team (ICT codes - zero places left)
+      phrases:
+        - technology team
+        - technology division
+        - it team
+        - it department
+        - engineering team
+        - engineering division
+        - product team
+        - digital team
+        - digital division
+        - software team
+        - platform team
+        - data engineering team
+        - development team
+        - devops team
+        - cyber team
+
+    - id: statistician
+      points: 22
+      code_ref: statistician
+      confidence: medium
+      label: research / statistics flavour (224113, bar is 90 not 80)
+      phrases:
+        - statistical analysis
+        - statistical modelling
+        - statistical methods
+        - statistician
+        - survey design
+        - survey methodology
+        - sampling
+        - hypothesis testing
+        - regression analysis
+        - experimental design
+        - epidemiolog*
+        - biostatistic*
+        - actuarial
+        - market research
+        - research methodology
+
+  # 3. No team named anywhere. Don't guess - neutral score, low confidence.
+  no_team:
+    points: 18
+    code_ref: unclear
+    confidence: low
+
+  # Language adjustment, applied to the base above.
+  language:
+    raise:
+      points_each: 2
+      cap: 12
+      phrases:
+        - process improvement
+        - process re-engineering
+        - process reengineering
+        - process mapping
+        - stakeholder analysis
+        - stakeholder engagement
+        - business efficiency
+        - business process
+        - reviewing systems and procedures
+        - systems and procedures
+        - organisational problems
+        - organisational efficiency
+        - pain points
+        - operating model
+        - ways of working
+        - business case
+        - cost savings
+        - efficiency gains
+        - root cause
+    lower:
+      points_each: 3
+      cap: 15
+      phrases:
+        - requirements gathering
+        - gathering requirements
+        - functional requirements
+        - non-functional requirements
+        - system specifications
+        - technical specifications
+        - user stories
+        - acceptance criteria
+        - working with developers
+        - work with developers
+        - software development
+        - software engineering
+        - platform support
+        - system integration
+        - api
+        - ci/cd
+        - sprint
+        - scrum
+        - jira
+        - backlog grooming
+        - codebase
+        - deployment pipeline
+
+# --- Sponsorship signal: 25 points ----------------------------------------
+# Ads almost never say this. 0 is the normal result, not a penalty.
+sponsorship:
+  max_points: 25
+  phrases:
+    - visa sponsorship
+    - sponsorship available
+    - sponsorship considered
+    - will consider sponsorship
+    - able to sponsor
+    - happy to sponsor
+    - "482"
+    - "494"
+    - "186"
+    - tss visa
+    - skilled visa
+    - international applicants welcome
+    - we welcome international applicants
+    - open to candidates requiring sponsorship
+
+# --- Salary: 15 points -----------------------------------------------------
+# Midpoint of a stated range is used. Not stated = half points, flagged "?".
+salary:
+  max_points: 15
+  unknown: half
+  bands:
+    - min: 80000
+      points: 15
+      label: $80k+
+    - min: 70000
+      points: 8
+      label: $70-80k
+    - min: 0
+      points: 0
+      label: under $70k
+
+# --- Employment type: 15 points -------------------------------------------
+# Not stated = half points, flagged "?".
+employment_type:
+  max_points: 15
+  unknown: half
+  # Checked in order; the first match wins, so best-case wording wins when an
+  # ad offers several (e.g. "full-time or part-time").
+  types:
+    - id: full_time
+      points: 15
+      label: Full-time
+      phrases:
+        - full-time
+        - full time
+        - fulltime
+        - permanent role
+        - ongoing role
+        - 38 hours
+        - 40 hours per week
+    - id: contract
+      points: 11
+      label: Contract (6-12 months)
+      phrases:
+        - fixed term
+        - fixed-term
+        - max term
+        - maximum term
+        - 6 month contract
+        - 12 month contract
+        - 6-month contract
+        - 12-month contract
+        - contract role
+        - day rate
+        - daily rate
+    - id: part_time
+      points: 7
+      label: Part-time (check hours - 20+/wk needed)
+      note: Confirm it is 20+ hours a week; under 20 earns no PR hours.
+      phrases:
+        - part-time
+        - part time
+    - id: casual
+      points: 0
+      label: Casual
+      note: Casual hours rarely reach 20/week reliably.
+      phrases:
+        - casual role
+        - casual position
+        - casual basis
+
+# ---------------------------------------------------------------------------
+# What to ask in an interview when the ad leaves something out.
+# ---------------------------------------------------------------------------
+questions:
+  team_unclear: "Which team does this role sit in?"
+  salary_unknown: "What's the salary range for this role?"
+  type_unknown: "Is this role full-time, part-time or a contract?"
+  part_time_hours: "How many hours a week is the part-time load?"
+
+# ---------------------------------------------------------------------------
+# Search filters (used by the job puller, before any scoring).
+# ---------------------------------------------------------------------------
+search:
+  # Any Australian city counts toward PR, so search the whole country.
+  location: Australia
+  # Empty on purpose: the "3+ years" knockout judges experience from the ad's
+  # own words, and skipped jobs stay visible. A LinkedIn level filter would also
+  # drop every ad with no level set (HUB24, PropertyMe last time).
+  # LinkedIn's levels, if ever needed: Internship, Entry level, Associate,
+  # Mid-Senior level, Director.
+  experience_levels: []
+  # No senior-level jobs. A title containing any of these words (as a whole
+  # word) is never stored. Seek drops them before charging; LinkedIn cannot,
+  # so they are paid for and then dropped. Dropped titles are listed after
+  # each pull, and the raw file in data/raw/ still has them.
+  exclude_title_words:
+    - senior*     # "*" = starts with, so "SeniorBusiness Analyst" is caught too
+    - snr
+    - sr
+    - lead
+    - principal
+    - head of
+    - manager
+    - director
+    - chief
+
+# ---------------------------------------------------------------------------
+# Search keywords (used from Stage 2 onwards by the job puller).
+# Copied from the Notion page; grouped by which ANZSCO code they aim at.
+# ---------------------------------------------------------------------------
+search_keywords:
+  primary:   # aims at 224711 / 224712
+    - Business Analyst
+    - Commercial Analyst
+    - Process Analyst
+    - Business Improvement Analyst
+    - Operations Analyst
+    - Change Analyst
+    - Industry Analyst
+    # "Quality Analyst" dropped 26 Sep 2026: it pulls software-testing jobs
+    # (QA Engineer, Manual Tester, SAP Test Analyst), which are ICT work.
+    - Continuous Improvement Analyst
+  core:      # broad volume, either target code depending on the team
+    - Data Analyst
+    - Reporting Analyst
+    - BI Analyst
+    - Business Intelligence Analyst
+    - Insights Analyst
+    - Analytics Analyst
+  niche:     # rare combination, least contested
+    - Payroll Analyst
+    - Payroll Data Analyst
+    - Tax Analyst
+    - Employment Tax
+    - Compliance Analyst
+    - Workforce Analyst
+    - People Analytics
+    - HR Data Analyst
+    - Remuneration Analyst
+  opportunistic:  # only if one lands; aims at 224113 Statistician
+    - Market Research Analyst
+    - Research Analyst
+    - Survey Analyst
+    - Health Data Analyst
+    - Risk Analyst
+    - Actuarial Analyst
+  entry_level:
+    - Graduate Analyst
+    - Junior Analyst
+    - Associate Analyst
+  tool_based:
+    - Power BI
+    - SQL Analyst
+    - Tableau
+    - Dashboard Developer
+
+# ---------------------------------------------------------------------------
+# Contacts: who to connect with at a company (Stage 3).
+# 3 people per company: 2 with hiring power, 1 analyst already doing the job.
+# Titles are what LinkedIn is filtered by, so they must read like real titles.
+# ---------------------------------------------------------------------------
+contacts:
+  per_company: 3
+  mix:
+    # "Hiring power" - owns the team and the budget, and owns the pain point
+    # an artifact would solve.
+    - role: manager
+      wanted: 2
+      # One plain word for the dashboard's "Managers at X" button. LinkedIn
+      # returns nothing for long AND / OR / NOT queries, so keep it to one word.
+      search: manager
+      titles:
+        - Head of Finance
+        - Finance Manager
+        - Head of Strategy
+        - Strategy Manager
+        - Head of Operations
+        - Operations Manager
+        - Head of Business Improvement
+        - Continuous Improvement Manager
+        - Head of Transformation
+        - Transformation Manager
+        - Head of Risk
+        - Risk Manager
+        - Head of People
+        - People and Culture Manager
+        - Head of Insights
+        - Analytics Manager
+        - Data Analytics Manager
+        - Head of Data
+        - Commercial Manager
+        - Chief Operating Officer
+        - Chief Financial Officer
+    # Already doing the job. Best reply rate, and they can tell me which team
+    # the role actually sits in - the question the rubric cannot answer.
+    - role: analyst
+      wanted: 1
+      search: analyst
+      titles:
+        - Business Analyst
+        - Data Analyst
+        - Commercial Analyst
+        - Process Analyst
+        - Operations Analyst
+        - Insights Analyst
+        - Business Improvement Analyst
+  # LinkedIn's title matching is fuzzy: "Head of Risk" returns "Head of
+  # Information Security & Risk", and "Head of Data" returns data engineers.
+  # A contact whose title matches any of these is dropped — they sit in the
+  # ICT world this whole rubric is trying to stay out of.
+  exclude_titles:
+    - security
+    - cyber
+    - infosec
+    - information technology
+    - infrastructure
+    - software
+    - devops
+    - network
+    - helpdesk
+    - service desk
+    - platform engineer
+    - data engineer
+    - test
+    - quality assurance
+
+# ---------------------------------------------------------------------------
+# Outreach rules. Given to the research step (research.py) when it drafts an
+# opening line. From the Notion page "Job Search - Keywords & Filters".
+# ---------------------------------------------------------------------------
+outreach:
+  rules:
+    - Never lead with sponsorship. Don't mention visas or sponsorship in a first message at all.
+    - Lead with full work rights in Australia until February 2028.
+    - Lead with the artifact and the specific problem it addresses, not with a request for a job.
+    - Follow up on day 5 if there is no reply.

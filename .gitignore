@@ -1,0 +1,9 @@
+.env
+out/
+data/
+__pycache__/
+*.pyc
+profile/*.pdf
+profile/*.docx
+profile/*.txt
+.pytest_cache/

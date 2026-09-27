@@ -1,0 +1,159 @@
+# Skills profile: what I can show proof of (Ratana)
+#
+# Used for the Skills fit score, which is kept separate from the PR score.
+# For each job: of the skills listed here that the ad asks for, how many can I prove?
+#
+#   level:    strong = used it for real (job, shipped project)
+#             some   = learning / small project / coursework
+#             none   = ads ask for it, I don't have it yet
+#   evidence: where the proof lives (resume line, GitHub repo). Shown on the card.
+#   phrases:  how ads word it. Same matcher as the rubric: a trailing `*` is a
+#             prefix match, a trailing "s" is tolerated, whole words only.
+#
+# Soft skills that every ad and every resume claim ("communication",
+# "problem solving") are left out on purpose: they don't tell jobs apart.
+
+levels:
+  strong: 1.0
+  some: 0.5
+  none: 0.0
+
+skills:
+  # --- tools ---------------------------------------------------------------
+  - name: Excel
+    level: strong
+    evidence: "internship: Excel pipelines to profile & validate messy data"
+    phrases: [advanced excel, microsoft excel, ms excel, excel skill, excel capability,
+              strong excel, in excel, using excel, "excel,", excel and, excel modelling,
+              excel modeling]
+
+  - name: SQL
+    level: strong
+    evidence: "repo payroll_analytic (SQL compliance checks); SparkSQL, Snowflake SQL"
+    phrases: [sql, t-sql, postgresql, mysql, sql server]
+
+  - name: Python
+    level: strong
+    evidence: "repos payroll_multi_agent, SBAA, data_job_research"
+    phrases: [python, pandas, jupyter]
+
+  - name: R
+    level: none
+    evidence: ""
+    phrases: [rstudio, r programming, python or r, r or python, python/r, r/python]
+
+  - name: Power BI
+    level: some
+    evidence: "repo payroll_analytic: Power BI dashboard (one project)"
+    phrases: [power bi, powerbi, dax, power query]
+
+  - name: Tableau
+    level: none
+    evidence: ""
+    phrases: [tableau]
+
+  - name: Other BI tools
+    level: none
+    evidence: ""
+    phrases: [looker, qlik, looker studio]
+
+  - name: Databricks / Snowflake / Spark
+    level: some
+    evidence: "coursework: NYC Taxi 1B rows on Databricks/Spark; YouTube lakehouse on Snowflake"
+    phrases: [snowflake, databricks, spark, pyspark, bigquery, redshift]
+
+  - name: Azure / AWS / GCP
+    level: none
+    evidence: ""
+    phrases: [azure, aws, gcp, google cloud]
+
+  - name: dbt / data pipelines
+    level: some
+    evidence: "coursework: Airbnb + Census ELT with Airflow + dbt"
+    phrases: [dbt, etl, elt, data pipeline, airflow]
+
+  - name: Git / version control
+    level: strong
+    evidence: "22 public repos on GitHub (RatanaSovann)"
+    phrases: [git, github, version control]
+
+  - name: Process mapping tools
+    level: none
+    evidence: ""
+    phrases: [visio, bpmn, lucidchart, promapp, signavio]
+
+  - name: Jira / Confluence
+    level: none
+    evidence: ""
+    phrases: [jira, confluence]
+
+  - name: Automation / low-code
+    level: none
+    evidence: ""
+    phrases: [power automate, power apps, alteryx, vba, macros, rpa]
+
+  - name: CRM / ERP systems
+    level: none
+    evidence: ""
+    phrases: [salesforce, sap, netsuite, workday, dynamics 365, crm]
+
+  - name: AI / LLM tools
+    level: strong
+    evidence: "repo payroll_multi_agent: 6-agent Claude system, live demo; data_analyst_agent (LangGraph)"
+    phrases: [generative ai, genai, llm, chatgpt, copilot, ai tool, prompt engineering]
+
+  # --- analysis methods ----------------------------------------------------
+  - name: Statistics / modelling
+    level: strong
+    evidence: "Master of Data Science (GPA 6.47/7); repo Sydney-housing: regression, hypothesis testing"
+    phrases: [statistical, statistics, regression, hypothesis testing, a/b test,
+              machine learning, predictive model]
+
+  - name: Forecasting
+    level: some
+    evidence: "prediction models (housing prices, taxi fares, flight fares), not time-series forecasting"
+    phrases: [forecast*]
+
+  - name: Financial modelling
+    level: some
+    evidence: "Bachelor of Commerce (Melbourne): financial analysis"
+    phrases: [financial model*, variance analysis, budgeting, business case]
+
+  - name: Dashboards & reporting
+    level: strong
+    evidence: "Plotly dashboards + findings reports (payroll_multi_agent); Power BI; internship insights"
+    phrases: [dashboard, data visualisation, data visualization, reporting]
+
+  - name: Data quality / governance
+    level: strong
+    evidence: "internship: data quality validation; medallion pipeline; SHA-256 audit trail"
+    phrases: [data quality, data governance, data cleansing, data cleaning, data integrity]
+
+  # --- business analysis ---------------------------------------------------
+  - name: Stakeholder engagement
+    level: some
+    evidence: "internship insights to team; Sponsorship Director, UTS Japanese Society"
+    phrases: [stakeholder engagement, stakeholder management, engage stakeholder*,
+              stakeholder relationship, workshop*]
+
+  - name: Process improvement
+    level: some
+    evidence: "automated manual reviews: payroll compliance (days → 90s), SBAA (frame-by-frame logging)"
+    phrases: [process improvement, continuous improvement, process mapping, process map,
+              current state, future state, lean, six sigma]
+
+  - name: Requirements gathering
+    level: none
+    evidence: ""
+    phrases: [business requirements, requirements gathering, gather requirements,
+              elicit*, user stories, acceptance criteria]
+
+  - name: Agile delivery
+    level: none
+    evidence: ""
+    phrases: [agile, scrum, sprint]
+
+  - name: Risk & compliance
+    level: some
+    evidence: "repos payroll_multi_agent + payroll_analytic: SG, PAYG, Modern Award checks"
+    phrases: [risk assessment, risk management, compliance, aml, kyc, audit]
