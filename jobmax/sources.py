@@ -54,6 +54,24 @@ class Search:
     exclude_title_words: list[str] = field(default_factory=list)
 
 
+MAX_AGE_DAYS = 30  # the boards are asked for this window too; Seek's nearest option is 31 days
+
+
+def too_old(job: dict) -> int | None:
+    """How many days ago the job was posted, if that is more than MAX_AGE_DAYS.
+
+    None when it is recent, has no posting date (unknown is not old), or was
+    added from a link (you picked it, so it stays whatever its age).
+    """
+    if job.get("added_from_link"):
+        return None
+    try:
+        days = (datetime.now().date() - datetime.fromisoformat(job.get("posted", "")[:10]).date()).days
+    except ValueError:
+        return None
+    return days if days > MAX_AGE_DAYS else None
+
+
 def too_senior(role: str, words: list[str]) -> str | None:
     """The first exclude word found in a job title.
 

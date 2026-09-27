@@ -24,7 +24,7 @@ from pathlib import Path
 import anthropic
 import yaml
 
-from jobmax import contacts, notion as tracker, store
+from jobmax import connections, contacts, notion as tracker, store
 from jobmax.ads import AdFormatError, from_record, load_ad
 from jobmax.config import MissingSecret, secret
 from jobmax.notion import (BRIEF, Notion, NotionError, append_blocks, create_row, ensure_columns,
@@ -160,6 +160,11 @@ def main() -> int:
         return 0
 
     jobs = {job["key"]: job for job in store.load()}
+    try:
+        known = connections.index(connections.load())
+    except ValueError as err:
+        print(f"Skipping your LinkedIn connections: {err}")
+        known = {}
     client = anthropic.Anthropic(api_key=api_key)
     total = 0.0
     for page in todo:
@@ -171,7 +176,8 @@ def main() -> int:
             continue
         print(f"\n{company}: researching…", flush=True)
         prompt = build_prompt(job, rubric.score(from_record(job)), profile,
-                              _plain(props.get("Contacts", {})), rules)
+                              _plain(props.get("Contacts", {})), rules,
+                              connections.as_text(connections.known_at(job["company"], known)))
         try:
             brief = research(client, prompt)
         except (RuntimeError, anthropic.APIError) as err:

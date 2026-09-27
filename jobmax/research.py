@@ -48,8 +48,10 @@ this role exists to fix it.
 3 bullets, best first. Each: **name of the artifact**, what it contains, which pain
 point it addresses, which of the person's skills it shows, and the public data to use.
 ## Who to send it to
-Who among the contacts given, and why each. If none are given or they don't fit,
-name the job titles to look for instead.
+Who among the contacts given, and why each. People in <people_you_know> are already
+connected with the job seeker: list them first, and say what to ask each one for (an
+introduction to the hiring manager, what the team's real problems are, a referral).
+If no one fits, name the job titles to look for instead.
 ## Opening line
 One or two sentences for a first LinkedIn message, following the outreach rules.
 ## Sources
@@ -91,7 +93,7 @@ def _skills_text(profile: SkillProfile | None) -> str:
 
 
 def build_prompt(job: dict, result: Result, profile: SkillProfile | None,
-                 contacts: str, outreach_rules: list[str]) -> str:
+                 contacts: str, outreach_rules: list[str], known: str = "") -> str:
     why = "\n".join([f"+ {h}" for h in result.helps] + [f"- {h}" for h in result.hurts])
     rules = "\n".join(f"- {r}" for r in outreach_rules) or "(none)"
     return f"""Today is {date.today():%d %B %Y}.
@@ -116,6 +118,10 @@ Full ad:
 <contacts>
 {contacts.strip() or "(none found yet)"}
 </contacts>
+
+<people_you_know>
+{known.strip() or "(no LinkedIn connections at this company)"}
+</people_you_know>
 
 <outreach_rules>
 {rules}

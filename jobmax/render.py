@@ -235,6 +235,7 @@ details.job[open] .chev { transform:rotate(90deg); }
        color:var(--muted); white-space:nowrap; }
 .tag.warn { color:var(--warn); border-color:currentColor; }
 .tag.bad { color:var(--bad); border-color:currentColor; }
+.tag.good { color:var(--good); border-color:currentColor; }
 
 .body { padding:16px; }
 .cols { display:grid; grid-template-columns:1.35fr 1fr; gap:26px; }
@@ -426,12 +427,19 @@ def _pill(value: int | None, label: str, good: int, ok: int, tip: str) -> str:
             f"<b>{value}</b><small>{label}</small></div>")
 
 
-def _people(job: dict, found: dict | None, contact_mix: list[dict]) -> str:
-    """People already found (if any), then LinkedIn searches to find them yourself."""
+def _people(job: dict, found: dict | None, known: list[dict], contact_mix: list[dict]) -> str:
+    """Your own connections there, people already found (if any), then LinkedIn searches."""
     searches = "".join(
         f'<a class="btn" href="{escape(url)}" target="_blank" rel="noopener">{escape(label)} ↗</a>'
         for label, url in contacts.search_links(job["company"], contact_mix, contacts.company_link(job)))
     rows = []
+    for p in known:
+        name = escape(p["name"])
+        if p.get("linkedin"):
+            name = f'<a href="{escape(p["linkedin"])}" target="_blank" rel="noopener">{name}</a>'
+        rows.append(f'<p class="person">{name} <span class="t">· you’re connected</span>'
+                    f'<br><span class="t">{escape(p["position"] or "position not listed")}'
+                    f' · LinkedIn says: {escape(p["company"])}</span></p>')
     for p in (found or {}).get("people") or []:
         name = escape(p["name"])
         if p.get("linkedin"):
@@ -462,7 +470,8 @@ def _skills(fit: SkillFit | None) -> str:
 
 
 def _job_row(job: dict, result: Result, found: dict | None, agency: bool,
-             fit: SkillFit | None, tracker_page: str = "", contact_mix: list[dict] = ()) -> str:
+             fit: SkillFit | None, known: list[dict], tracker_page: str = "",
+             contact_mix: list[dict] = ()) -> str:
     salary = job_fact(job["description"], "Salary")
     days = _days(job.get("posted", ""))
     meta = " · ".join(filter(None, [
@@ -477,6 +486,10 @@ def _job_row(job: dict, result: Result, found: dict | None, agency: bool,
     tags = []
     if result.skipped:
         tags.append(f'<span class="tag bad">{escape(result.knockouts[0][0])}</span>')
+    if known:
+        names = ", ".join(p["name"] for p in known)
+        tags.append(f'<span class="tag good" title="Your LinkedIn connections there: {escape(names)}">'
+                    f'you know {len(known)}</span>')
     if agency:
         tags.append('<span class="tag" title="Recruitment agency: the real employer is hidden">agency</span>')
     if result.flags:
@@ -518,16 +531,17 @@ def _job_row(job: dict, result: Result, found: dict | None, agency: bool,
         f'<div class="panel"><section><h3>{"Why it was skipped" if result.skipped else "Why this PR score"}</h3>{why}</section>'
         f'<section><h3>Skills fit</h3>{_skills(fit)}</section></div>'
         f'<div class="panel"><section><div class="actions">{"".join(buttons)}</div></section>'
-        f'<section><h3>People to contact</h3>{_people(job, found, contact_mix)}</section></div>'
+        f'<section><h3>People to contact</h3>{_people(job, found, known, contact_mix)}</section></div>'
         "</div><details><summary>Full job description</summary>"
         f'<pre>{escape(job["description"])}</pre></details></div></details>'
     )
 
 
-def render_dashboard(rows: list[tuple[dict, Result, dict | None, bool, SkillFit | None]],
+def render_dashboard(rows: list[tuple[dict, Result, dict | None, bool, SkillFit | None, list[dict]]],
                      goal_name: str, tracker_url: str = "", tracker_pages: dict[str, str] | None = None,
                      contact_mix: list[dict] = ()) -> str:
-    """rows: (job record, its score, its company's contacts or None, is agency, skills fit).
+    """rows: (job record, its score, its company's contacts or None, is agency, skills fit,
+    your LinkedIn connections there).
 
     tracker_pages maps a job key to its Notion page (from the last sync).
     contact_mix is the goal file's contacts.mix, for the LinkedIn search buttons.

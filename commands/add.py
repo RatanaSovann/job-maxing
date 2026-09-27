@@ -5,7 +5,7 @@
 
 Works with Seek, LinkedIn, and most company career sites (see jobmax/links.py).
 Free: it reads the ad page directly, no Apify. The job is kept even if the
-seniority filter or the rules would skip it: you picked it.
+seniority filter, the 30-day age limit or the rules would skip it: you picked it.
 
 This only adds to the list. To also send it to Notion and rebuild the job list page:
     python -m commands.refresh --add LINK        (or the "Add job" box on the page from app.py)
@@ -41,6 +41,7 @@ def main(argv: list[str] | None = None) -> int:
             failed += 1
             continue
 
+        record["added_from_link"] = True
         report = store.merge([record])
         if not report.added:
             print(f"  Already in your list: {record['company']} — {record['role']}")

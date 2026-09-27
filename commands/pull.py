@@ -22,7 +22,7 @@ import yaml
 from jobmax import store
 from jobmax.apify import PullError, account, run_actor
 from jobmax.config import MissingSecret, secret
-from jobmax.sources import SOURCES, Search, too_senior
+from jobmax.sources import MAX_AGE_DAYS, SOURCES, Search, too_old, too_senior
 
 from jobmax.config import ROOT
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -159,7 +159,9 @@ def report_on(pulled: dict, exclude: list[str], raw_path, token) -> int:
             if not record:
                 unusable += 1
             elif word := too_senior(record["role"], exclude):
-                dropped.append((record, word))
+                dropped.append((record, f'senior: "{word}"'))
+            elif days := too_old(record):
+                dropped.append((record, f"posted {days} days ago"))
             else:
                 records.append(record)
         if cost is not None:
@@ -170,14 +172,14 @@ def report_on(pulled: dict, exclude: list[str], raw_path, token) -> int:
     print(f"\nKept {len(records)} · new {len(report.added)} · "
           f"already had {len(report.seen_before)} · "
           f"duplicate titles {len(report.duplicates_in_pull)} · "
-          f"senior (dropped) {len(dropped)} · unusable {unusable}")
+          f"senior or over {MAX_AGE_DAYS} days old (dropped) {len(dropped)} · unusable {unusable}")
     if raw_path:
         print(f"Re-read from {raw_path}")
 
     if dropped:
-        print("\nDropped as senior (still in data/raw/):")
-        for r, word in dropped:
-            print(f"  {r['source']:<8} {r['company'][:30]:<30}  {r['role'][:50]}  [\"{word}\"]")
+        print("\nDropped (still in data/raw/):")
+        for r, why in dropped:
+            print(f"  {r['source']:<8} {r['company'][:30]:<30}  {r['role'][:50]}  [{why}]")
 
     if report.added:
         print("\nNew jobs:")

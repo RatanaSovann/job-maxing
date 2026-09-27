@@ -153,6 +153,7 @@ Run these from the project folder in a terminal.
 | `python pull.py --from-raw data/raw/<file>.json` | Re-read a saved pull | free |
 | `python -m commands.add LINK` | Add a job from its link (Seek, LinkedIn, careers pages) | free |
 | `python -m commands.refresh --add LINK` | Add from a link → Notion → dashboard (what the **Add job** box does) | free |
+| `python -m commands.connections` | Who you already know at the companies in your list | free |
 | `python dashboard.py --open` | Rebuild and open the job list page | free |
 | `python sync_notion.py --dry-run` | Show what the Notion sync would change | free |
 | `python sync_notion.py` | Send scored jobs to Notion, refresh scores | free |
@@ -252,6 +253,9 @@ It works offline and costs nothing to rebuild.
 - **Search, sort** (PR score, Skills fit, Newest), board filter, hide agencies.
 - **Click a job** to see why it scored, its skills chips, links (the ad,
   **Track in Notion**, company LinkedIn), people to contact, and the full ad.
+- Jobs **posted over 30 days ago** drop off the page (they stay in `data/jobs.json`,
+  and in Notion if they were sent while fresh). Pulls don't keep them in the first place.
+  Jobs you added from a link stay whatever their age.
 - **Skipped** jobs are folded at the bottom with the rule that fired, so you can
   check the rules.
 - **Open tracker in Notion ↗** at the top right.
@@ -319,7 +323,22 @@ then run `python research.py --ad that_file.txt`. Only `company` and `role` are 
 
 ## Finding people to contact
 
-Every job on the dashboard has LinkedIn search buttons:
+**Start with people you already know.** Download your LinkedIn connections:
+LinkedIn → Settings → Data privacy → Get a copy of your data → pick **Connections**.
+LinkedIn emails a link, usually within minutes. Unzip it and save `Connections.csv` in
+`data/`. Then:
+
+- `python -m commands.connections` lists every company in your job list where you
+  know someone, with their position and profile link.
+- The dashboard tags those jobs **you know N** and lists the people first under
+  *People to contact*.
+- Research briefs are told about them, and put them first in "Who to send it to".
+
+Matching is by company name, ignoring words like "Australia", "Group" and "Pty Ltd".
+Each person shows the employer *they* typed, so you can spot a wrong match. The file
+is never committed (it holds other people's details). Download a fresh copy now and then.
+
+Every job on the dashboard also has LinkedIn search buttons:
 
 - **Managers at X** and **Analysts at X.** For LinkedIn jobs these open the company's
   **People** tab filtered by one word (current staff only). For Seek jobs they run a

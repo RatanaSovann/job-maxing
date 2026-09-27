@@ -388,3 +388,25 @@ What I decided, and why. Newest at the bottom. One or two lines per decision.
 - Salaries in other currencies keep their code (e.g. "EUR 90,000"), so they count as unknown rather than being read as dollars.
 - **Why:** finding a job outside the daily pull meant copying the ad into a text file by hand.
 - **Rejected:** running the Apify actors on one link (costs money, slower); asking Claude to read the page (costs money, and might reword the ad, which would break the quoted reasons on the card). If a page can't be read, the text-file route (`research --ad`) still works.
+
+---
+
+## 2026-09-27 · Jobs older than 30 days
+
+- **Pulls drop any job posted over 30 days ago**, next to the seniority filter (the boards are already asked for the last month, but Seek's nearest option is 31 days, and one 31-day-old ad got through).
+- **The job list hides stored jobs once they pass 30 days**, and the Notion sync doesn't add them as new rows. They stay in `data/jobs.json`, and rows already in Notion are left alone.
+- Jobs with no posting date are kept (unknown isn't old). Jobs added from a link are kept whatever their age: you picked them.
+- **Why:** old ads are likely filled or closed, and they clutter the list.
+- **Rejected:** deleting them from `data/jobs.json` (research on a job you're pursuing needs the ad, and a job would come back as "new" if a board still listed it); deleting Notion rows (they may hold your status, notes and contacts).
+
+---
+
+## 2026-09-27 · Stage 6: people you already know (LinkedIn connections)
+
+- **Your own LinkedIn connections export (`data/Connections.csv`) is matched to the companies in your job list.** Shown by `python -m commands.connections`, as a "you know N" tag and a list on the dashboard, and given to research briefs so "Who to send it to" puts them first.
+- Idea taken from career-ops (`linkedin-join.mjs`, MIT license), rewritten to fit this project.
+- **Matching:** company names compared after dropping words like "Australia", "Group", "Pty Ltd"; a longer name also matches if it starts with a name of two or more words ("Commonwealth Bank" → "Commonwealth Bank of Australia"). One-word prefixes don't match ("Hays" ≠ "Hays Travel"). Each person shows the employer they typed, so a wrong match is easy to spot.
+- It only changes **who you contact**, never the score.
+- The export stays in `data/` and is git-ignored anywhere in the project, because the repo is public and the file holds other people's details.
+- **Why:** free, no scraping, no ban risk, while automatic lookup is blocked on Apify's free plan. A person you already know is the best first contact.
+- **Rejected:** writing them into Notion's Contacts column (that column is yours, and the tool never overwrites it); fuzzy name matching (more false matches, harder to trust).

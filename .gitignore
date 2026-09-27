@@ -7,3 +7,4 @@ profile/*.pdf
 profile/*.docx
 profile/*.txt
 .pytest_cache/
+Connections.csv

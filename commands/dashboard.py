@@ -12,11 +12,12 @@ import os
 import sys
 from pathlib import Path
 
-from jobmax import contacts, notion, store
+from jobmax import connections, contacts, notion, store
 from jobmax.ads import from_record
 from jobmax.render import render_dashboard
 from jobmax.scorer import Rubric
 from jobmax.skills import SkillProfile
+from jobmax.sources import MAX_AGE_DAYS, too_old
 
 from jobmax.config import ROOT
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -38,14 +39,22 @@ def main(argv: list[str] | None = None) -> int:
 
     rubric = Rubric.load(args.goal)
     people = contacts.load()
+    try:
+        known = connections.index(connections.load())
+    except ValueError as err:  # a wrong file shouldn't stop the page being built
+        print(f"Skipping your LinkedIn connections: {err}")
+        known = {}
     profile = SkillProfile.load(args.profile) if args.profile.exists() else None
     if profile is None:
         print(f"No skills profile at {args.profile}, so no Skills fit score.")
-    rows = []
+    rows, old = [], 0
     for job in jobs:
+        if too_old(job):  # still in data/jobs.json (and Notion, if it was sent), just not listed
+            old += 1
+            continue
         ad = from_record(job)
         rows.append((job, rubric.score(ad), people.get(contacts.company_link(job)), contacts.is_agency(job),
-                     profile.match(ad) if profile else None))
+                     profile.match(ad) if profile else None, connections.known_at(job["company"], known)))
 
     args.out.parent.mkdir(parents=True, exist_ok=True)
     html = render_dashboard(rows, rubric.name, notion.database_url(), notion.load_pages(),
@@ -55,7 +64,7 @@ def main(argv: list[str] | None = None) -> int:
     skipped = sum(1 for r in rows if r[1].skipped)
     with_people = sum(1 for r in rows if r[2] and r[2].get("people"))
     print(f"{len(rows)} jobs · {len(rows) - skipped} scored · {skipped} skipped · "
-          f"{with_people} with contacts → {args.out}")
+          f"{with_people} with contacts · {old} hidden (posted over {MAX_AGE_DAYS} days ago) → {args.out}")
     if args.open:
         os.startfile(args.out)  # Windows: opens in the default browser
     return 0

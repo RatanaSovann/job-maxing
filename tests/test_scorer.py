@@ -7,6 +7,8 @@ in fixtures/ — run `python -m commands.score` for that.
 """
 
 import sys
+import tempfile
+from datetime import date, timedelta
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -16,7 +18,8 @@ from jobmax.ads import parse_ad  # noqa: E402
 from jobmax.scorer import Rubric, find, parse_salary  # noqa: E402
 from jobmax.contacts import search_links, search_name  # noqa: E402
 from jobmax.skills import SkillProfile  # noqa: E402
-from jobmax.sources import from_ad  # noqa: E402
+from jobmax.sources import from_ad, too_old  # noqa: E402
+from jobmax import connections  # noqa: E402
 from jobmax.notion import markdown_blocks  # noqa: E402
 from jobmax.research import _search_outcomes  # noqa: E402
 from jobmax.links import _job_id, _job_postings, _salary, html_text  # noqa: E402
@@ -215,6 +218,30 @@ results.append(check("JobPosting found inside @graph",
 results.append(check("salary range in dollars", _salary(
     {"currency": "AUD", "value": {"minValue": 80000, "maxValue": 95000, "unitText": "YEAR"}}),
     "$80,000–$95,000 per year"))
+old_date = (date.today() - timedelta(days=45)).isoformat()
+results.append(check("job posted 45 days ago is too old", too_old({"posted": old_date}), 45))
+results.append(check("job posted 30 days ago is kept",
+                     too_old({"posted": (date.today() - timedelta(days=30)).isoformat()}), None))
+results.append(check("job with no posting date is kept", too_old({"posted": ""}), None))
+results.append(check("old job added from a link is kept", too_old({"posted": old_date, "added_from_link": True}), None))
+
+# --- LinkedIn connections -------------------------------------------------
+export = Path(tempfile.mkdtemp()) / "Connections.csv"
+export.write_text('Notes:\n"When exporting your connection data, you may notice..."\n\n'
+                  "First Name,Last Name,URL,Email Address,Company,Position,Connected On\n"
+                  "Jo,Lee,https://www.linkedin.com/in/jolee,,Deloitte Australia,Analyst,01 Jan 2026\n"
+                  "Sam,Ng,,,Commonwealth Bank,Data Analyst,02 Jan 2026\n"
+                  "Ana,Roy,,,Hays Travel,Agent,03 Jan 2026\n"
+                  "No,Company,,,,,04 Jan 2026\n", encoding="utf-8")
+known = connections.index(connections.load(export))
+results.append(check("export read past the Notes lines", sum(len(v) for v in known.values()), 3))
+results.append(check("company filler words dropped", connections.company_key("Deloitte Pty Ltd"), "deloitte"))
+results.append(check("connection matched despite 'Australia'",
+                     [p["name"] for p in connections.known_at("Deloitte", known)], ["Jo Lee"]))
+results.append(check("two-word name matches a longer one",
+                     [p["name"] for p in connections.known_at("Commonwealth Bank of Australia", known)], ["Sam Ng"]))
+results.append(check("one-word name doesn't match a longer one", connections.known_at("Hays", known), []))
+
 results.append(check("foreign salary is not read as dollars",
                      parse_salary("Salary: " + _salary({"currency": "EUR", "value": {"value": 90000}})), None))
 
