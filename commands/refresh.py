@@ -1,7 +1,8 @@
-"""Get the latest: pull new jobs, send them to Notion, rebuild the job list page.
+"""Get the latest: pull new jobs, check which ads have closed, send them to Notion,
+rebuild the job list page.
 
     python -m commands.refresh              the same as the dashboard's "Pull latest jobs" button
-    python -m commands.refresh --no-pull    just sync + dashboard (free)
+    python -m commands.refresh --no-pull    just check ads + sync + dashboard (free)
     python -m commands.refresh --add LINK   add a job from a link instead of pulling (free)
 
 Each step runs even if an earlier one fails, so a blocked board never stops
@@ -63,7 +64,8 @@ def run(say: Callable[[str], None], pull: bool = True, links: list[str] | None =
             log.flush()
 
         out(f"=== {datetime.now():%Y-%m-%d %H:%M} refresh ===")
-        steps = [("Sending to Notion", ["commands.sync_notion"]),
+        steps = [("Checking which ads have closed", ["commands.check_open"]),
+                 ("Sending to Notion", ["commands.sync_notion"]),
                  ("Rebuilding the job list", ["commands.dashboard"])]
         if links:
             out("Pull: skipped (adding from a link)")

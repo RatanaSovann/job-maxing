@@ -4,8 +4,9 @@
     python -m commands.sync_notion               add new jobs, refresh scores on existing ones
 
 Free. Knocked-out jobs are not sent (they stay on the dashboard's Skipped list),
-and neither are jobs posted over 30 days ago. Rows already in Notion are kept
-as they age, since you may be tracking them.
+and neither are jobs posted over 30 days ago or whose ad has closed. Rows already
+in Notion are kept, since you may be tracking them; a closed ad fills their
+"Ad closed" column.
 Your own columns (Status, Date applied, Outreach count, Research done,
 Artifact status, Contacts) are only filled when a job is first added, never
 overwritten after that.
@@ -22,7 +23,7 @@ from jobmax.notion import (Notion, NotionError, create_row, ensure_columns, miss
                            row_key, save_pages, tool_properties)
 from jobmax.scorer import Rubric
 from jobmax.skills import SkillProfile
-from jobmax.sources import too_old
+from jobmax.sources import closed, too_old
 
 from jobmax.config import ROOT
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -68,7 +69,7 @@ def main() -> int:
             ad = from_record(job)
             result = rubric.score(ad)
             page_id = existing.get(job["key"])
-            if not page_id and too_old(job):
+            if not page_id and (too_old(job) or closed(job)):
                 continue
             if result.skipped:
                 if page_id:

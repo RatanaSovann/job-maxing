@@ -69,15 +69,18 @@ def merge(records: list[dict], path: Path = STORE, unusable: int = 0) -> MergeRe
             report.added.append(record)
 
     if report.added:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        payload = json.dumps(existing + report.added, indent=1, ensure_ascii=False)
-        # Write to a temp file then replace, so an interrupted write cannot
-        # destroy jobs already collected.
-        temp = path.with_suffix(".json.tmp")
-        temp.write_text(payload, encoding="utf-8")
-        temp.replace(path)
-
+        save(existing + report.added, path)
     return report
+
+
+def save(jobs: list[dict], path: Path = STORE) -> None:
+    """Replace the store with these jobs (after changing fields on them)."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    # Write to a temp file then replace, so an interrupted write cannot
+    # destroy jobs already collected.
+    temp = path.with_suffix(".json.tmp")
+    temp.write_text(json.dumps(jobs, indent=1, ensure_ascii=False), encoding="utf-8")
+    temp.replace(path)
 
 
 def coverage(records: list[dict]) -> list[tuple[str, int, int]]:

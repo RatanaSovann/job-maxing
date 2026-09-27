@@ -41,6 +41,8 @@ TOOL_COLUMNS = {
     "Board": {"select": {}},
     "Job ad": {"url": {}},
     KEY: {"rich_text": {}},
+    # When the ad was found closed (commands/check_open.py); empty while it's open.
+    "Ad closed": {"date": {}},
     # Set by research.py when it writes a brief; sync never touches it.
     BRIEF: {"date": {}},
 }
@@ -182,6 +184,8 @@ def tool_properties(job: dict, result: Result, fit: SkillFit | None) -> dict:
         "Board": {"select": {"name": job["source"]}},
         "Job ad": {"url": job.get("url") or None},
         KEY: _text(job["key"]),
+        "Ad closed": {"date": {"start": status["checked"]}
+                      if (status := job.get("ad_status") or {}).get("state") == "closed" else None},
     }
 
 

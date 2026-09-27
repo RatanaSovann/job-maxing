@@ -19,6 +19,9 @@ Each brief names the people to send the artifact to (how many and which kinds co
 from `contacts:` in the goal file): your LinkedIn connections there first, then
 people found on the web, each with a source. If the job's Contacts column is empty,
 they are written there too; if you've already filled it in, it is left alone.
+
+Before each brief the ad is checked (free). A closed ad is skipped, so you don't pay
+for research on a filled role, unless you named the company with --company.
 """
 
 import argparse
@@ -34,6 +37,7 @@ from jobmax.ads import AdFormatError, from_record, load_ad
 from jobmax.config import MissingSecret, secret
 from jobmax.notion import (BRIEF, TEXT_LIMIT, Notion, NotionError, append_blocks, create_row, ensure_columns,
                            markdown_blocks, row_key)
+from jobmax.links import CLOSED, still_open
 from jobmax.research import MODEL, build_prompt, people_from, research
 from jobmax.scorer import Rubric
 from jobmax.skills import SkillProfile
@@ -166,7 +170,8 @@ def main() -> int:
         print("\nDry run — nothing researched, nothing charged.")
         return 0
 
-    jobs = {job["key"]: job for job in store.load()}
+    stored = store.load()
+    jobs = {job["key"]: job for job in stored}
     try:
         known = connections.index(connections.load())
     except ValueError as err:
@@ -181,6 +186,15 @@ def main() -> int:
         if job is None:
             print(f"\n{company}: this job is no longer in data/jobs.json, skipped.")
             continue
+        state, why = still_open(job)
+        job["ad_status"] = {"state": state, "why": why, "checked": date.today().isoformat()}
+        store.save(stored)
+        if state == CLOSED:
+            if not args.company:
+                print(f"\n{company}: the ad has closed ({why}), so not researched. "
+                      f"Research it anyway with --company \"{company}\".")
+                continue
+            print(f"\n{company}: note, the ad has closed ({why}). Researching anyway, since you named it.")
         print(f"\n{company}: researching…", flush=True)
         prompt = build_prompt(job, rubric.score(from_record(job)), profile,
                               _plain(props.get("Contacts", {})), rules,

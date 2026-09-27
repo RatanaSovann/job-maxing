@@ -431,3 +431,15 @@ What I decided, and why. Newest at the bottom. One or two lines per decision.
 - README updated to match, including every command name (`python -m commands.X`; the old `python pull.py` style no longer works).
 - **Why:** the button does the same thing when you actually want new jobs, and nothing runs, or costs money, when you don't.
 - **Rejected:** keeping both (two ways to trigger the same paid pull, and a background task that's easy to forget about).
+
+---
+
+## 2026-09-27 · Is the job still open?
+
+- **Each listed ad is re-read (free) to see if it has closed**, as a step of the Pull button (ads not checked in the last 2 days), with `python -m commands.check_open`, and just before research.
+- **Only a clear sign counts as closed:** Seek marks the ad expired; LinkedIn shows "No longer accepting applications" or the ad is gone (404); other sites have the page gone, a closing date that has passed, or strict closed wording ("no longer accepting applications", "this job has expired"…). A page that won't load, a block, or anything unclear is "couldn't tell", and the job stays listed.
+- Closed jobs drop off the job list, aren't added to Notion, and fill a new **Ad closed** date column on rows already there. Research skips a closed ad unless you name the company with `--company`.
+- Nothing is deleted; `check_open --all` brings back a job that turns out to be open.
+- Idea from career-ops' liveness check (MIT license); the wording list is a stricter subset of theirs.
+- **Why:** an ad can close on day 10 or stay open past day 30, so age alone is a rough guide. Checking before research saves $0.60+ on a filled role.
+- **Rejected:** treating "couldn't tell" as closed (a blocked request would hide good jobs); checking every ad on every pull (slower, and hard on the boards for no gain).

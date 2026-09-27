@@ -22,7 +22,9 @@ from jobmax.sources import from_ad, too_old  # noqa: E402
 from jobmax import connections  # noqa: E402
 from jobmax.notion import markdown_blocks  # noqa: E402
 from jobmax.research import _search_outcomes, people_from  # noqa: E402
-from jobmax.links import _job_id, _job_postings, _salary, html_text  # noqa: E402
+from jobmax.links import _CLOSED_WORDS, _job_id, _job_postings, _salary, html_text  # noqa: E402
+from jobmax.sources import closed  # noqa: E402
+from commands.check_open import due  # noqa: E402
 
 RUBRIC = Rubric.load(ROOT / "goals" / "pr_australia.yaml")
 
@@ -224,6 +226,22 @@ results.append(check("job posted 30 days ago is kept",
                      too_old({"posted": (date.today() - timedelta(days=30)).isoformat()}), None))
 results.append(check("job with no posting date is kept", too_old({"posted": ""}), None))
 results.append(check("old job added from a link is kept", too_old({"posted": old_date, "added_from_link": True}), None))
+
+# --- is the ad still open? ------------------------------------------------
+results.append(check("closed wording spotted",
+                     bool(_CLOSED_WORDS.search("Sorry, this job is no longer available.")), True))
+results.append(check("live ad about filling in a form is not closed",
+                     bool(_CLOSED_WORDS.search("Once the application form has been filled out, we'll call.")), False))
+results.append(check("closed job gives its reason",
+                     closed({"ad_status": {"state": "closed", "why": "Seek lists it as expired"}}),
+                     "Seek lists it as expired"))
+results.append(check("unknown is not closed", closed({"ad_status": {"state": "unknown", "why": "blocked"}}), None))
+today = date.today().isoformat()
+results.append(check("ad checked today is skipped", due({"ad_status": {"state": "open", "checked": today}}, False), False))
+results.append(check("ad never checked is due", due({}, False), True))
+results.append(check("closed ad isn't re-checked unless asked",
+                     (due({"ad_status": {"state": "closed", "checked": "2026-01-01"}}, False),
+                      due({"ad_status": {"state": "closed", "checked": "2026-01-01"}}, True)), (False, True)))
 
 # --- people named in a research brief -------------------------------------
 brief_md = ("## Snapshot\n- Makes software.\n## Who to send it to\n"

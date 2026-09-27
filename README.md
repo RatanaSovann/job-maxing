@@ -157,6 +157,8 @@ Run these from the project folder in a terminal.
 | `python -m commands.add LINK` | Add a job from its link (Seek, LinkedIn, careers pages) | free |
 | `python -m commands.refresh --add LINK` | Add from a link → Notion → dashboard (what the **Add job** box does) | free |
 | `python -m commands.connections` | Who you already know at the companies in your list | free |
+| `python -m commands.check_open` | Check which ads have closed (also part of the Pull button) | free |
+| `python -m commands.check_open --all` | Re-check every ad, closed ones too | free |
 | `python -m commands.dashboard --open` | Rebuild and open the job list as a plain file (buttons off) | free |
 | `python -m commands.sync_notion --dry-run` | Show what the Notion sync would change | free |
 | `python -m commands.sync_notion` | Send scored jobs to Notion, refresh scores | free |
@@ -257,6 +259,7 @@ browsing, but the buttons don't work. Rebuilding is free.
 - **Search, sort** (PR score, Skills fit, Newest), board filter, hide agencies.
 - **Click a job** to see why it scored, its skills chips, links (the ad,
   **Track in Notion**, company LinkedIn), people to contact, and the full ad.
+- Jobs whose **ad has closed** drop off the page too (see [Pulling new jobs](#pulling-new-jobs)).
 - Jobs **posted over 30 days ago** drop off the page (they stay in `data/jobs.json`,
   and in Notion if they were sent while fresh). Pulls don't keep them in the first place.
   Jobs you added from a link stay whatever their age.
@@ -276,7 +279,7 @@ Skipped list.
 
 | Filled by the tool (refreshed every sync) | Yours (set once when added, never overwritten) |
 |---|---|
-| Role, Company, PR score, Skills fit, Likely code, Why it scores, Skills have / missing, Salary, Board, Job ad, Research brief (date) | Status, Date applied, Outreach count, Research done, Artifact status, Contacts |
+| Role, Company, PR score, Skills fit, Likely code, Why it scores, Skills have / missing, Salary, Board, Job ad, Ad closed (date), Research brief (date) | Status, Date applied, Outreach count, Research done, Artifact status, Contacts |
 
 - **Follow-up date** = Date applied + 5 days (a Notion formula, updates instantly).
 - **Status:** To review → Researching → Applied → Followed up → Interview / Rejected /
@@ -284,6 +287,8 @@ Skipped list.
 - The full ad is on each job's page, and so is any research brief.
 - If a rule change later knocks out a job that's already in Notion, the sync lists it
   and leaves it alone: deleting a row could delete your notes.
+- **Ad closed** gets a date when the job's ad closes, so you notice if a job you're
+  pursuing is filled. Closed ads are never added as new rows.
 
 **Views (tabs):** All jobs · Pipeline (board by Status) · Top picks (PR 40+, not yet
 acted on) · Follow-ups · Jobs by status (chart) · Artifacts (chart) · Applied (count) ·
@@ -374,6 +379,12 @@ There is no automatic daily run. You pull when you want new jobs, with the
 - **Budget guard:** skips the pull if it could take this month's Apify spend past 80%
   of the limit.
 - **Research is never part of a pull:** it costs money and needs your choice.
+- **Closed ads:** after pulling, every listed ad not checked in the last 2 days is
+  re-read (free) to see if it has closed. Seek says when an ad has expired; LinkedIn
+  shows "No longer accepting applications"; other sites are closed when the page is
+  gone, the closing date has passed, or it says so. Anything unclear counts as
+  "couldn't tell" and the job stays listed. Research also checks the ad first and
+  skips a closed one, unless you name the company with `--company`.
 - Log of each run: `data/logs/refresh-<date>.log`.
 
 ---
@@ -430,6 +441,7 @@ commands/
   sync_notion.py    send scored jobs to Notion
   research.py       research briefs + 3 people into Notion (Claude + web search)
   connections.py    who you already know at each company (your LinkedIn export)
+  check_open.py     which ads have closed
   find_contacts.py  automatic contact lookup (blocked on the free Apify plan)
   score.py          score hand-saved ads in fixtures/ (calibration)
 
@@ -438,7 +450,7 @@ jobmax/
   skills.py         Skills fit against profile/skills.yaml
   ads.py            reads ad files and job records
   sources.py        LinkedIn / Seek / manual job records
-  links.py          reads a job ad from a pasted link
+  links.py          reads a job ad from a pasted link; checks if an ad is still open
   apify.py          Apify client (runs, costs, refused runs)
   store.py          data/jobs.json, de-duplication
   contacts.py       contact lookup + LinkedIn search links
@@ -462,10 +474,10 @@ tests/test_scorer.py      tests
 python tests/test_scorer.py
 ```
 
-74 checks, no network, free. They cover knockouts (and false alarms like "unpaid
+81 checks, no network, free. They cover knockouts (and false alarms like "unpaid
 parental leave"), points, salary parsing, phrase matching, skills fit, contact search
 links, the research brief → Notion conversion, hand-saved jobs, reading pasted links,
-the 30-day age limit, and LinkedIn connection matching.
+the 30-day age limit, closed-ad detection, and LinkedIn connection matching.
 
 ---
 

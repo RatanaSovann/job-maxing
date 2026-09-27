@@ -9,12 +9,15 @@ Free: one ordinary page fetch, no Apify. Three ways to read a page, tried in ord
 
 Seek and LinkedIn links get the board's own id, so pasting a job that a pull later
 finds (or already found) is recognised as the same job.
+
+still_open() re-reads a stored job's ad to see whether it has closed.
 """
 
 from __future__ import annotations
 
 import json
 import re
+from datetime import date
 from html import unescape
 from html.parser import HTMLParser
 from urllib.error import HTTPError, URLError
@@ -34,7 +37,9 @@ MAX_BYTES = 8_000_000
 
 
 class LinkError(ValueError):
-    pass
+    def __init__(self, message: str, status: int | None = None):
+        super().__init__(message)
+        self.status = status  # the HTTP status code, when the site answered with an error
 
 
 # --- HTML to plain text ------------------------------------------------------
@@ -87,7 +92,7 @@ def _get(url: str) -> tuple[str, str]:
             charset = response.headers.get_content_charset() or "utf-8"
             return response.geturl(), body.decode(charset, errors="replace")
     except HTTPError as err:
-        raise LinkError(f"{urlsplit(url).netloc} answered {err.code} ({err.reason}).") from None
+        raise LinkError(f"{urlsplit(url).netloc} answered {err.code} ({err.reason}).", err.code) from None
     except (URLError, TimeoutError, OSError) as err:
         raise LinkError(f"could not reach {urlsplit(url).netloc}: {getattr(err, 'reason', err)}") from None
 
@@ -102,6 +107,19 @@ def _job_id(url: str, path_pattern: str, query_key: str) -> str:
 
 # --- Seek --------------------------------------------------------------------
 
+def _seek_data(page: str) -> tuple[dict, dict]:
+    """(result, job) from the data Seek embeds in a job page."""
+    m = re.search(r"window\.SEEK_REDUX_DATA\s*=\s*(\{.*?\});?\s*\n", page, re.S)
+    if not m:
+        raise LinkError("Seek's page didn't include the job details (the page layout may have changed).")
+    try:
+        data = json.loads(m.group(1).replace(":undefined", ":null"))
+        result = data["jobdetails"]["result"]
+        return result, result["job"]
+    except (ValueError, KeyError, TypeError):
+        raise LinkError("Seek's page didn't include the job details (it may have expired).") from None
+
+
 def _seek(url: str) -> dict:
     # A job page (/job/123) or a search page with a job open (?jobId=123).
     job_id = _job_id(url, r"/job/(\d+)", "jobId")
@@ -109,16 +127,7 @@ def _seek(url: str) -> dict:
         raise LinkError("that Seek link doesn't point at one job. Open the ad and copy its address.")
     parts = urlsplit(url)
     page_url, page = _get(f"{parts.scheme}://{parts.netloc}/job/{job_id}")
-
-    m = re.search(r"window\.SEEK_REDUX_DATA\s*=\s*(\{.*?\});?\s*\n", page, re.S)
-    if not m:
-        raise LinkError("Seek's page didn't include the job details (the page layout may have changed).")
-    try:
-        data = json.loads(m.group(1).replace(":undefined", ":null"))
-        result = data["jobdetails"]["result"]
-        job = result["job"]
-    except (ValueError, KeyError, TypeError):
-        raise LinkError("Seek's page didn't include the job details (it may have expired).") from None
+    result, job = _seek_data(page)
 
     tracking = ((job.get("tracking") or {}).get("classificationInfo") or {})
     item = {  # the field names the Seek actor uses, so the same reader builds the record
@@ -234,16 +243,21 @@ def _place(value) -> str:
     return str(address or "")
 
 
-def _structured(url: str) -> dict:
-    page_url, page = _get(url)
-    posting = None
+def _posting(page: str) -> dict | None:
+    """The first schema.org JobPosting on a page, if any."""
     for block in re.findall(r'<script[^>]*application/ld\+json[^>]*>(.*?)</script>', page, re.S | re.I):
         try:
             posting = next(_job_postings(json.loads(block.strip())), None)
         except ValueError:
             continue
         if posting:
-            break
+            return posting
+    return None
+
+
+def _structured(url: str) -> dict:
+    page_url, page = _get(url)
+    posting = _posting(page)
     if not posting:
         raise LinkError("this page has no job details a program can read. Copy the ad into a text "
                         "file instead and use: python -m commands.research --ad FILE")
@@ -284,3 +298,61 @@ def from_link(url: str) -> dict:
     if host.endswith("linkedin.com"):
         return _linkedin(url)
     return _structured(url)
+
+
+# --- is the ad still open? ---------------------------------------------------
+
+OPEN, CLOSED, UNKNOWN = "open", "closed", "unknown"
+
+# Wording boards and careers sites use once an ad is closed. Kept strict on purpose:
+# a live ad saying "once the form has been filled" must not read as closed.
+_CLOSED_WORDS = re.compile(
+    r"no longer accepting applications|job (?:is )?no longer available|this (?:job|position|role|vacancy) "
+    r"(?:is )?no longer (?:available|open|advertised)|this job has expired|job (?:posting|ad) has expired|"
+    r"(?:position|role|vacancy|job) has (?:now )?been filled|applications (?:are|have) (?:now )?closed", re.I)
+
+
+def still_open(job: dict) -> tuple[str, str]:
+    """(OPEN / CLOSED / UNKNOWN, why) for a stored job, from a fresh look at its ad.
+
+    Only a clear sign counts as closed: the board says so, the page is gone (404/410),
+    or the posting's closing date has passed. A page that won't load, a block, or
+    anything unclear is UNKNOWN, so a job is never hidden on a guess.
+    """
+    source, url = job.get("source"), job.get("url") or ""
+    try:
+        if source == "seek":
+            job_id = job.get("source_id") or _job_id(url, r"/job/(\d+)", "jobId")
+            _, page = _get(f"https://au.seek.com/job/{job_id}")
+            _, ad = _seek_data(page)
+            if ad.get("isExpired") or (ad.get("status") or "Active") != "Active":
+                return CLOSED, f"Seek lists it as {(ad.get('status') or 'expired').lower()}"
+            return OPEN, "Seek lists it as active"
+        if source == "linkedin":
+            job_id = job.get("source_id") or _job_id(url, r"/jobs/view/(?:[^/]*-)?(\d+)", "currentJobId")
+            _, page = _get(f"https://www.linkedin.com/jobs-guest/jobs/api/jobPosting/{job_id}")
+            if _CLOSED_WORDS.search(html_text(page)):
+                return CLOSED, "LinkedIn says it's no longer accepting applications"
+            if "top-card-layout__title" in page:
+                return OPEN, "LinkedIn still shows the ad"
+            return UNKNOWN, "LinkedIn's page didn't show the job"
+        if not url:
+            return UNKNOWN, "no link to check"
+        _, page = _get(url)
+    except LinkError as err:
+        if err.status in (404, 410):
+            return CLOSED, "the ad has been taken down"
+        return UNKNOWN, str(err)
+
+    posting = _posting(page)
+    until = str((posting or {}).get("validThrough") or "")[:10]
+    try:
+        if until and date.fromisoformat(until) < date.today():
+            return CLOSED, f"applications closed on {until}"
+    except ValueError:
+        pass
+    if m := _CLOSED_WORDS.search(html_text(page)):
+        return CLOSED, f'the page says "{m.group(0)}"'
+    if posting:
+        return OPEN, "the page still has the job"
+    return UNKNOWN, "couldn't tell from the page"

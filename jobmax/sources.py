@@ -72,6 +72,12 @@ def too_old(job: dict) -> int | None:
     return days if days > MAX_AGE_DAYS else None
 
 
+def closed(job: dict) -> str | None:
+    """Why the ad has closed, if the last check (commands/check_open.py) found it closed."""
+    status = job.get("ad_status") or {}
+    return status.get("why") if status.get("state") == "closed" else None
+
+
 def too_senior(role: str, words: list[str]) -> str | None:
     """The first exclude word found in a job title.
 
