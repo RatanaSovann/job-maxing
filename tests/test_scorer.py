@@ -21,7 +21,7 @@ from jobmax.skills import SkillProfile  # noqa: E402
 from jobmax.sources import from_ad, too_old  # noqa: E402
 from jobmax import connections  # noqa: E402
 from jobmax.notion import markdown_blocks  # noqa: E402
-from jobmax.research import _search_outcomes  # noqa: E402
+from jobmax.research import _search_outcomes, people_from  # noqa: E402
 from jobmax.links import _job_id, _job_postings, _salary, html_text  # noqa: E402
 
 RUBRIC = Rubric.load(ROOT / "goals" / "pr_australia.yaml")
@@ -224,6 +224,16 @@ results.append(check("job posted 30 days ago is kept",
                      too_old({"posted": (date.today() - timedelta(days=30)).isoformat()}), None))
 results.append(check("job with no posting date is kept", too_old({"posted": ""}), None))
 results.append(check("old job added from a link is kept", too_old({"posted": old_date, "added_from_link": True}), None))
+
+# --- people named in a research brief -------------------------------------
+brief_md = ("## Snapshot\n- Makes software.\n## Who to send it to\n"
+            "- **Jo Lee**, Head of Finance — owns the pain point. [source](https://acme.com/team)\n"
+            "- **Sam Ng**, Data Analyst — ask which team the role sits in.\n"
+            "## Opening line\nHi Jo")
+results.append(check("people pulled out of the brief", people_from(brief_md),
+                     "Jo Lee, Head of Finance — owns the pain point. source (https://acme.com/team)\n"
+                     "Sam Ng, Data Analyst — ask which team the role sits in."))
+results.append(check("no people section, nothing pulled", people_from("## Snapshot\n- x"), ""))
 
 # --- LinkedIn connections -------------------------------------------------
 export = Path(tempfile.mkdtemp()) / "Connections.csv"

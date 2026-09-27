@@ -330,7 +330,7 @@ search:
     - lead
     - manager
 search_keywords:
-  primary:                 # what the daily pull searches for
+  primary:                 # what a pull searches for
     - Business Analyst
     - Operations Analyst
 ```
@@ -377,5 +377,5 @@ python dashboard.py --goal goals/pay_growth.yaml --out out/pay_growth.html
 ```
 
 `pull.py`, `dashboard.py`, `sync_notion.py`, `research.py`, `score.py` and `find_contacts.py` all take `--goal`
-(the 8:00 daily run uses the default file). Version 2 will generate these files from a plain-English
+(the Pull button uses the default file). Version 2 will generate these files from a plain-English
 goal. The format above is what it will produce.

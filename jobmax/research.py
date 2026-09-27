@@ -6,6 +6,7 @@ which notion.markdown_blocks turns into Notion blocks.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from datetime import date
 
@@ -15,7 +16,7 @@ from .scorer import Result
 from .skills import SkillProfile
 
 MODEL = "claude-opus-5"
-MAX_SEARCHES = 6          # web searches per company; the main cost lever after tokens
+MAX_SEARCHES = 8          # web searches per company (2 of them for finding people); the main cost lever after tokens
 MAX_CONTINUATIONS = 5     # resumes of a long server-side search turn (pause_turn)
 
 # For the cost line printed after each company. Claude Opus 5 list prices.
@@ -48,10 +49,18 @@ this role exists to fix it.
 3 bullets, best first. Each: **name of the artifact**, what it contains, which pain
 point it addresses, which of the person's skills it shows, and the public data to use.
 ## Who to send it to
-Who among the contacts given, and why each. People in <people_you_know> are already
-connected with the job seeker: list them first, and say what to ask each one for (an
-introduction to the hiring manager, what the team's real problems are, a referral).
-If no one fits, name the job titles to look for instead.
+Exactly the number of people asked for in <who_to_find>, as one bullet each:
+**Name**, their job title — why them, what to send or ask them, and a [source](url)
+showing they work there now. Fill the list in this order:
+1. People in <people_you_know> (already connected: ask for an introduction, the team's
+   real problems, or a referral).
+2. Suitable people from <contacts>.
+3. People you find with web search: the company's leadership or team page, recent news,
+   conference talks, articles they wrote, or LinkedIn profiles that appear in search
+   results. Pick titles like the ones in <who_to_find> and never the excluded ones.
+Only name a person a source shows at this company; never guess a name or an email.
+If you can't find enough, say how many are missing and which job titles to search
+for on LinkedIn instead.
 ## Opening line
 One or two sentences for a first LinkedIn message, following the outreach rules.
 ## Sources
@@ -92,8 +101,17 @@ def _skills_text(profile: SkillProfile | None) -> str:
     return "\n".join(lines) or "(none listed)"
 
 
+def _wanted_text(mix: list[dict], exclude: list[str]) -> str:
+    groups = [f'- {g.get("wanted", 1)} × {g["role"]}, titles like: {", ".join(g.get("titles", []))}'
+              for g in mix if g.get("wanted")]
+    if not groups:
+        return "- 3 people: whoever owns the problem this role solves, and someone doing the job now"
+    return "\n".join(groups + ([f'Excluded titles (ICT, wrong world): {", ".join(exclude)}'] if exclude else []))
+
+
 def build_prompt(job: dict, result: Result, profile: SkillProfile | None,
-                 contacts: str, outreach_rules: list[str], known: str = "") -> str:
+                 contacts: str, outreach_rules: list[str], known: str = "",
+                 mix: list[dict] = (), exclude_titles: list[str] = ()) -> str:
     why = "\n".join([f"+ {h}" for h in result.helps] + [f"- {h}" for h in result.hurts])
     rules = "\n".join(f"- {r}" for r in outreach_rules) or "(none)"
     return f"""Today is {date.today():%d %B %Y}.
@@ -123,11 +141,29 @@ Full ad:
 {known.strip() or "(no LinkedIn connections at this company)"}
 </people_you_know>
 
+<who_to_find>
+{_wanted_text(mix, exclude_titles)}
+</who_to_find>
+
 <outreach_rules>
 {rules}
 </outreach_rules>
 
 Research {job["company"]} and write the brief."""
+
+
+def people_from(markdown: str) -> str:
+    """The brief's "Who to send it to" bullets as plain lines, for Notion's Contacts column.
+
+    '- **Jo Lee**, Head of Finance — why… [source](https://x)' -> 'Jo Lee, Head of Finance — why… (https://x)'
+    """
+    section = re.search(r"^## Who to send it to\s*$(.*?)(?=^## |\Z)", markdown, re.M | re.S)
+    lines = []
+    for line in (section.group(1) if section else "").splitlines():
+        if m := re.match(r"\s*(?:[-*]|\d+\.)\s+(.*)", line):
+            text = re.sub(r"\[([^\]]*)\]\(([^)]*)\)", r"\1 (\2)", m.group(1))
+            lines.append(text.replace("**", "").strip())
+    return "\n".join(lines)
 
 
 def research(client: anthropic.Anthropic, prompt: str) -> Brief:

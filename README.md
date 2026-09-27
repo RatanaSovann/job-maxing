@@ -1,6 +1,6 @@
 # Job Maxing
 
-Pulls analyst job ads every morning, scores each one against a career goal, explains
+Pulls analyst job ads when you click a button, scores each one against a career goal, explains
 every score with quotes from the ad, and tracks the outreach for the jobs you choose
 to pursue.
 
@@ -19,7 +19,7 @@ the same engine can serve other goals later (version 2).
 - [The strategy it serves](#the-strategy-it-serves)
 - [Daily use](#daily-use)
 - [The two scores](#the-two-scores)
-  (full guide, with how to change the rules: **[RUBRIC.md](RUBRIC.md)**)
+  (full guide, with how to change the rules: **[RUBRIC.md](docs/RUBRIC.md)**)
 - [Commands](#commands)
 - [Setup (new machine)](#setup-new-machine)
 - [Configuration](#configuration)
@@ -27,7 +27,7 @@ the same engine can serve other goals later (version 2).
 - [The Notion tracker](#the-notion-tracker)
 - [Research briefs](#research-briefs)
 - [Finding people to contact](#finding-people-to-contact)
-- [Daily automatic runs](#daily-automatic-runs)
+- [Pulling new jobs](#pulling-new-jobs)
 - [Costs](#costs)
 - [What's stored where](#whats-stored-where)
 - [Project layout](#project-layout)
@@ -40,19 +40,19 @@ the same engine can serve other goals later (version 2).
 ## How it works
 
 ```
- every day at 8:00 (Windows Task Scheduler)
+ "Pull latest jobs" button (python app.py), or a pasted link in "Add job"
         │
         ▼
- pull.py ──► Apify scrapes LinkedIn + Seek ──► data/jobs.json (de-duplicated)
+ pull ──► Apify scrapes LinkedIn + Seek ──► data/jobs.json (de-duplicated)
         │
         ▼
  scorer: knockouts → PR score /100 + Skills fit /100, each with quoted reasons
         │
-        ├──► sync_notion.py ──► Notion tracker (you track status, contacts, follow-ups)
-        └──► dashboard.py   ──► out/dashboard.html (browse, filter, sort)
+        ├──► sync_notion ──► Notion tracker (you track status, contacts, follow-ups)
+        └──► dashboard   ──► out/dashboard.html (browse, filter, sort)
 
  on demand, for companies you pick:
- research.py ──► Claude + web search ──► research brief on the job's Notion page
+ research ──► Claude + web search ──► brief + 3 people on the job's Notion page
 ```
 
 **Engine separate from view.** The engine (puller, scorer, rubric) is code plus config
@@ -77,13 +77,15 @@ February 2028; follow up on day 5.
 
 ## Daily use
 
-1. **Morning:** new jobs have already been pulled, scored and sent to Notion.
-   Open `out/dashboard.html` or Notion's **Top picks** tab.
+1. **Get new jobs.** Run `python app.py`: the job list opens in your browser. Click
+   **Pull latest jobs**. New jobs are pulled, scored and sent to Notion, and the page
+   reloads with them (2–4 minutes). Leave the terminal window open while you use it.
 2. **Pick a job you like.** In Notion set its Status to **Researching**, then run
-   `python research.py`. A research brief appears on the job's Notion page.
+   `python -m commands.research`. A research brief appears on the job's Notion page.
 3. **Build the artifact** from one of the brief's ideas.
-4. **Find 3 people** with the dashboard's LinkedIn buttons ("Managers at X",
-   "Analysts at X", "Everyone at X") and add them to the job's **Contacts** in Notion.
+4. **Check the 3 people** the brief names (also in the job's **Contacts** column).
+   Confirm each on LinkedIn; swap anyone who doesn't fit, using the dashboard's
+   LinkedIn buttons ("Managers at X", "Analysts at X", "Everyone at X").
 5. **Apply and reach out.** Set Status to **Applied** and fill in **Date applied**.
    Notion works out the **Follow-up date** (day 5) for you; the **Follow-ups** tab
    lists what's due.
@@ -91,7 +93,7 @@ February 2028; follow up on day 5.
 Found a job somewhere else? Paste its link into the **Add job** box at the top of the
 job list (open it with `python app.py`). It is read, scored, added to the list and to
 Notion, free. Works with Seek, LinkedIn and most company careers pages. If a page
-can't be read, save the ad as a text file and run `python research.py --ad my_job.txt`
+can't be read, save the ad as a text file and run `python -m commands.research --ad my_job.txt`
 (scored, added and researched).
 
 ---
@@ -145,26 +147,27 @@ Run these from the project folder in a terminal.
 
 | Command | What it does | Cost |
 |---|---|---|
-| `python daily.py` | The whole morning routine: pull → Notion → dashboard | ~$0.04–0.08 |
-| `python daily.py --no-pull` | Notion sync + dashboard only | free |
-| `python pull.py --dry-run` | Show what a pull would fetch and cost | free |
-| `python pull.py` | Pull 20 jobs from each of LinkedIn and Seek | ~$0.04–0.08 |
-| `python pull.py --source seek` | One board only | less |
-| `python pull.py --from-raw data/raw/<file>.json` | Re-read a saved pull | free |
+| `python app.py` | Open the job list with working **Pull latest jobs** and **Add job** buttons | free to open |
+| `python -m commands.refresh` | What the Pull button does: pull → Notion → dashboard | ~$0.04–0.08 |
+| `python -m commands.refresh --no-pull` | Notion sync + dashboard only | free |
+| `python -m commands.pull --dry-run` | Show what a pull would fetch and cost | free |
+| `python -m commands.pull` | Pull 20 jobs from each of LinkedIn and Seek | ~$0.04–0.08 |
+| `python -m commands.pull --source seek` | One board only | less |
+| `python -m commands.pull --from-raw data/raw/<file>.json` | Re-read a saved pull | free |
 | `python -m commands.add LINK` | Add a job from its link (Seek, LinkedIn, careers pages) | free |
 | `python -m commands.refresh --add LINK` | Add from a link → Notion → dashboard (what the **Add job** box does) | free |
 | `python -m commands.connections` | Who you already know at the companies in your list | free |
-| `python dashboard.py --open` | Rebuild and open the job list page | free |
-| `python sync_notion.py --dry-run` | Show what the Notion sync would change | free |
-| `python sync_notion.py` | Send scored jobs to Notion, refresh scores | free |
-| `python research.py --dry-run` | Which "Researching" jobs would get a brief | free |
-| `python research.py` | Brief for every job with Status "Researching" | ~$0.40–0.60 each |
-| `python research.py --company Praemium` | Brief for one company, any status | ~$0.40–0.60 |
-| `python research.py --company X --refresh` | A new brief even if one exists | ~$0.40–0.60 |
-| `python research.py --ad my_job.txt` | Add + score + research a job not in the list | ~$0.40–0.60 |
-| `python score.py` | Score the hand-saved ads in `fixtures/` (calibration) | free |
+| `python -m commands.dashboard --open` | Rebuild and open the job list as a plain file (buttons off) | free |
+| `python -m commands.sync_notion --dry-run` | Show what the Notion sync would change | free |
+| `python -m commands.sync_notion` | Send scored jobs to Notion, refresh scores | free |
+| `python -m commands.research --dry-run` | Which "Researching" jobs would get a brief | free |
+| `python -m commands.research` | Brief + 3 people for every job with Status "Researching" | ~$0.60–0.90 each |
+| `python -m commands.research --company Praemium` | Brief for one company, any status | ~$0.60–0.90 |
+| `python -m commands.research --company X --refresh` | A new brief even if one exists | ~$0.60–0.90 |
+| `python -m commands.research --ad my_job.txt` | Add + score + research a job not in the list | ~$0.60–0.90 |
+| `python -m commands.score` | Score the hand-saved ads in `fixtures/` (calibration) | free |
 | `python tests/test_scorer.py` | Run the tests | free |
-| `python find_contacts.py` | Automatic contact lookup. **Blocked on Apify's free plan**, see below | — |
+| `python -m commands.find_contacts` | Automatic contact lookup. **Blocked on Apify's free plan**, see below | — |
 
 Every paid command has a `--dry-run` that spends nothing.
 
@@ -188,19 +191,15 @@ Needs **Windows**, **Python 3.11+** (Anaconda is fine) and accounts on
      put it in `NOTION_DATABASE_ID`.
    - On the database: **•••** → **Connections** → add your integration. (Without
      this, Notion answers "Could not find database".)
-   - Run `python sync_notion.py`. It creates all the columns itself.
+   - Run `python -m commands.sync_notion`. It creates all the columns itself.
 4. **Add your skills.** Edit `profile/skills.yaml`: a level and proof for each skill.
 5. **Check it works**
    ```
    python tests/test_scorer.py
-   python pull.py --dry-run
-   python daily.py
-   python dashboard.py --open
+   python -m commands.pull --dry-run
+   python app.py
    ```
-6. **Turn on the daily run**
-   ```
-   powershell -ExecutionPolicy Bypass -File schedule_daily.ps1
-   ```
+   Then click **Pull latest jobs** on the page that opens.
 
 To use it for **someone else**, give them their own `.env`, `profile/skills.yaml` and,
 if their goal differs, their own goal file (see below).
@@ -235,7 +234,7 @@ Source of truth for the PR rules: the Notion page **"Job Search — Keywords & F
 
 Each skill has a `level` (strong / some / none), `evidence` (a resume line or repo,
 shown on the card) and `phrases` (how ads word it). Update it when you finish a
-project or learn a tool, then run `python dashboard.py --open`.
+project or learn a tool, then run `python -m commands.dashboard --open`.
 
 ### `.env` — keys
 
@@ -245,8 +244,13 @@ project or learn a tool, then run `python dashboard.py --open`.
 
 ## The dashboard
 
-`out/dashboard.html`, rebuilt every morning, or on demand with `python dashboard.py --open`.
-It works offline and costs nothing to rebuild.
+Open it with `python app.py`: the buttons only work while that's running. The page
+(`out/dashboard.html`) is rebuilt after every pull, added job or Notion sync, or by hand
+with `python -m commands.dashboard --open`. Opened as a plain file it's fine for
+browsing, but the buttons don't work. Rebuilding is free.
+
+- **Pull latest jobs:** pull → Notion → rebuild, with a live progress bar. See
+  [Pulling new jobs](#pulling-new-jobs).
 
 - **Tiles:** jobs to look at · top picks (PR 40+) · strong on both (PR 40+ and
   Skills 60+) · skipped. Click one to filter.
@@ -289,17 +293,22 @@ Dashboard (empty; add the views above as widgets by hand if you want one screen)
 
 ## Research briefs
 
-`python research.py` researches every job whose Status is **Researching** and adds a
+`python -m commands.research` researches every job whose Status is **Researching** and adds a
 brief to the bottom of its Notion page:
 
 - **Snapshot:** what the company does, its size, what's changing now
 - **Likely pain points:** 2–3, each with evidence from the ad or a linked source
 - **Artifact ideas:** 3, weekend-sized, built from public data, using your skills
-- **Who to send it to:** from the job's Contacts, or which titles to look for
+- **Who to send it to:** 3 named people (2 with hiring power, 1 analyst doing the job,
+  set by `contacts:` in the goal file). Your LinkedIn connections there come first, then
+  your Contacts, then people found on the web, each with a source link. If the job's
+  **Contacts** column in Notion is empty, they're written there too.
 - **Opening line:** follows the outreach rules
 - **Sources:** clickable links
 
-Claude Opus 5 with web search (up to 6 searches). The **Research brief** column gets
+Claude Opus 5 with web search (up to 8 searches, about $0.60–0.90 a company).
+People are only looked up for companies you research, so you only pay for the ones
+you're pursuing. Check each person's LinkedIn before reaching out: people move jobs. The **Research brief** column gets
 the date, so a job isn't researched twice (use `--refresh` for a new brief). If the
 searches return nothing, **nothing is written**: a brief from the job ad alone would
 look like research without being research. Check the links before relying on the
@@ -317,7 +326,7 @@ linkedin: https://www.linkedin.com/company/example-co
 (paste the whole ad here)
 ```
 
-then run `python research.py --ad that_file.txt`. Only `company` and `role` are required.
+then run `python -m commands.research --ad that_file.txt`. Only `company` and `role` are required.
 
 ---
 
@@ -355,27 +364,17 @@ shown. It works again if the Apify plan is upgraded.
 
 ---
 
-## Daily automatic runs
+## Pulling new jobs
 
-**Windows Task Scheduler** (built into Windows, not Apify) starts `daily.py` at 8:00
-every day. It runs pull → Notion sync → dashboard.
+There is no automatic daily run. You pull when you want new jobs, with the
+**Pull latest jobs** button (or `python -m commands.refresh`).
 
-- Runs on **your laptop**, only while you're logged in (no password stored). If the
-  laptop is off at 8:00, it runs as soon as it's back on. No window pops up.
-- Only the scraping happens on Apify's servers; everything else runs locally.
+- Only the scraping happens on Apify's servers; everything else runs on your laptop.
 - If one step fails, the others still run.
 - **Budget guard:** skips the pull if it could take this month's Apify spend past 80%
   of the limit.
-- **Research is never automatic:** it costs money and needs your choice.
-- Log of each run: `data/logs/daily-<date>.log`.
-
-```
-powershell -ExecutionPolicy Bypass -File schedule_daily.ps1               # set up (8:00)
-powershell -ExecutionPolicy Bypass -File schedule_daily.ps1 -Time 07:30   # change time
-powershell -ExecutionPolicy Bypass -File schedule_daily.ps1 -Remove       # stop
-```
-
-To see it: Start menu → **Task Scheduler** → Task Scheduler Library → **JobMaxing Daily**.
+- **Research is never part of a pull:** it costs money and needs your choice.
+- Log of each run: `data/logs/refresh-<date>.log`.
 
 ---
 
@@ -383,9 +382,10 @@ To see it: Start menu → **Task Scheduler** → Task Scheduler Library → **Jo
 
 | What | Service | Cost |
 |---|---|---|
-| Daily pull (20 LinkedIn + 20 Seek) | Apify | ~$0.04–0.08, capped at $0.14 |
-| A month of daily pulls | Apify | ~$1–2.50 (free plan limit: $10/month) |
-| One research brief | Anthropic | ~$0.40–0.60 |
+| One pull (20 LinkedIn + 20 Seek) | Apify | ~$0.04–0.08, capped at $0.14 |
+| Pulling every day for a month | Apify | ~$1–2.50 (free plan limit: $10/month) |
+| One research brief (with 3 people) | Anthropic | ~$0.60–0.90 |
+| Adding a job from a link | — | free |
 | Dashboard, Notion sync, scoring, tests | — | free |
 
 ---
@@ -400,7 +400,8 @@ Everything is in the project folder (about 2 MB). Notion holds a copy of what yo
 | `data/raw/` | The untouched scraper output of each pull (audit trail). Grows ~2–3 MB a month. |
 | `data/contacts.json` | People found by the old automatic lookup (9 companies) |
 | `data/notion_pages.json` | Which Notion page belongs to which job (for dashboard links) |
-| `data/logs/` | One log per daily run |
+| `data/logs/` | One log per day you pull, add a job or sync |
+| `data/Connections.csv` | Your LinkedIn connections export, if you've saved it (never committed) |
 | `out/dashboard.html` | The job list page |
 | `profile/` | Your resume and `skills.yaml` |
 | `goals/` | The rubric |
@@ -408,7 +409,7 @@ Everything is in the project folder (about 2 MB). Notion holds a copy of what yo
 
 **Only in Notion:** research briefs and your tracking (status, dates, contacts, notes).
 
-**Not in git:** `.env`, `data/`, `out/`, and the resume files in `profile/`
+**Not in git:** `.env`, `data/`, `out/`, `Connections.csv` anywhere, and the resume files in `profile/`
 (see `.gitignore`). `profile/skills.yaml` *is* included.
 
 **No backup:** if the laptop is lost, everything except Notion goes with it. Putting
@@ -419,14 +420,18 @@ the project folder in OneDrive is the simplest fix.
 ## Project layout
 
 ```
-daily.py            the morning routine (what Task Scheduler runs)
-pull.py             pull jobs from LinkedIn + Seek via Apify
-dashboard.py        build out/dashboard.html
-sync_notion.py      send scored jobs to Notion
-research.py         research briefs into Notion (Claude + web search)
-find_contacts.py    automatic contact lookup (blocked on the free Apify plan)
-score.py            score hand-saved ads in fixtures/ (calibration)
-schedule_daily.ps1  set up / change / remove the daily run
+app.py              the job list page with working Pull / Add job buttons
+
+commands/
+  refresh.py        pull (or add a link) → Notion → dashboard; what the buttons run
+  pull.py           pull jobs from LinkedIn + Seek via Apify
+  add.py            add a job from a pasted link
+  dashboard.py      build out/dashboard.html
+  sync_notion.py    send scored jobs to Notion
+  research.py       research briefs + 3 people into Notion (Claude + web search)
+  connections.py    who you already know at each company (your LinkedIn export)
+  find_contacts.py  automatic contact lookup (blocked on the free Apify plan)
+  score.py          score hand-saved ads in fixtures/ (calibration)
 
 jobmax/
   scorer.py         applies the rubric: knockouts, points, quoted reasons
@@ -437,6 +442,7 @@ jobmax/
   apify.py          Apify client (runs, costs, refused runs)
   store.py          data/jobs.json, de-duplication
   contacts.py       contact lookup + LinkedIn search links
+  connections.py    reads your LinkedIn connections export, matches companies
   notion.py         Notion client, tracker columns, page content
   research.py       the research prompt and Claude call
   render.py         the HTML pages
@@ -456,9 +462,10 @@ tests/test_scorer.py      tests
 python tests/test_scorer.py
 ```
 
-57 checks, no network, free. They cover knockouts (and false alarms like "unpaid
+74 checks, no network, free. They cover knockouts (and false alarms like "unpaid
 parental leave"), points, salary parsing, phrase matching, skills fit, contact search
-links, the research brief → Notion conversion, and hand-saved jobs.
+links, the research brief → Notion conversion, hand-saved jobs, reading pasted links,
+the 30-day age limit, and LinkedIn connection matching.
 
 ---
 
@@ -471,7 +478,8 @@ links, the research brief → Notion conversion, and hand-saved jobs.
 | Apify: "free user run limit exceeded" | That actor's free runs are used up. Pulls are unaffected; contact lookup is (use the LinkedIn buttons). |
 | `anthropic.APIConnectionError` right away | An old `brotli` package: `pip install -U "brotli>=1.2"`. |
 | Garbled "—" or "→" in the console | Windows console encoding; the scripts handle it. If a new script shows it, add `sys.stdout.reconfigure(encoding="utf-8")`. |
-| The 8:00 run didn't happen | Laptop off or logged out; it runs at next login. Check Task Scheduler → JobMaxing Daily → Last Run Result, and `data/logs/`. |
+| The Pull button says it needs the app | You opened `out/dashboard.html` as a file. Run `python app.py` and use the page it opens. |
+| "Add job" says it can't read the page | That site publishes no job details a program can read. Save the ad as a text file and use `python -m commands.research --ad FILE`. |
 | A job was skipped wrongly | Read the quoted reason on the dashboard's Skipped list; fix the phrase in the goal file's `knockouts`, or add an `ignore_phrases` entry. |
 | A research brief failed | Nothing was written, and it says why. Try again later, or `--refresh` next time. |
 
@@ -480,7 +488,7 @@ links, the research brief → Notion conversion, and hand-saved jobs.
 ## Other docs
 
 - `CLAUDE.md`: the original project brief and design decisions made before any code.
-- `RUBRIC.md`: how the scores are calculated, and how to change the rules.
-- `DECISIONS.md`: a dated timeline of every design choice, including the rejected options.
+- `docs/RUBRIC.md`: how the scores are calculated, and how to change the rules.
+- `docs/DECISIONS.md`: a dated timeline of every design choice, including the rejected options.
 - `STATUS.md`: where the build is up to.
 - `fixtures/README.md`: the format for hand-saved job ads.

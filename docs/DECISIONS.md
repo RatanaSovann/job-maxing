@@ -410,3 +410,24 @@ What I decided, and why. Newest at the bottom. One or two lines per decision.
 - The export stays in `data/` and is git-ignored anywhere in the project, because the repo is public and the file holds other people's details.
 - **Why:** free, no scraping, no ban risk, while automatic lookup is blocked on Apify's free plan. A person you already know is the best first contact.
 - **Rejected:** writing them into Notion's Contacts column (that column is yours, and the tool never overwrites it); fuzzy name matching (more false matches, harder to trust).
+
+---
+
+## 2026-09-27 · Stage 6: 3 people per company, found during research
+
+- **The research brief now names 3 people** for the companies you research (Status "Researching"), following the `contacts:` mix in the goal file: 2 with hiring power, 1 analyst doing the job. Order: your LinkedIn connections there, then your Notion Contacts, then people found by web search (team pages, news, talks, LinkedIn profiles in search results), each with a source link.
+- If the job's **Contacts** column is empty, the people are written there too. If you've filled it in, it's left alone.
+- Up to 8 web searches instead of 6; estimate now ~$0.60–0.90 a company.
+- Never guesses a name or an email; says how many are missing and which titles to search if it can't find enough.
+- **Why:** you only need contacts for the companies you're making an artifact for, and research already runs only for those. Automatic lookup (`find_contacts`, Apify) is blocked on the free plan.
+- **Rejected:** looking up people for every pulled job (paying for companies you'll never contact); a separate contact step (one more command to remember, when research already knows the company).
+
+---
+
+## 2026-09-27 · Scheduler removed: pull on demand
+
+- **No more daily 8:00 run.** New jobs come from the **Pull latest jobs** button on the job list (`python app.py`), or `python -m commands.refresh`. The leftover "JobMaxing Daily" task in Windows Task Scheduler was deleted too (it pointed at `daily.py`, which no longer exists, so it would have failed silently).
+- The budget guard, the "every step runs even if one fails" rule and the log (`data/logs/refresh-<date>.log`) all carry over to the button.
+- README updated to match, including every command name (`python -m commands.X`; the old `python pull.py` style no longer works).
+- **Why:** the button does the same thing when you actually want new jobs, and nothing runs, or costs money, when you don't.
+- **Rejected:** keeping both (two ways to trigger the same paid pull, and a background task that's easy to forget about).

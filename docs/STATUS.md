@@ -26,8 +26,8 @@ python pull.py --dry-run                        # plan + cost, spends nothing
 python pull.py                                  # 20 LinkedIn + 20 Seek, all Australia, no senior titles, ~$0.08
 python pull.py --source seek                     # one board only
 python pull.py --from-raw data/raw/<file>.json  # re-read a saved pull, free
-python daily.py                                 # pull + sync + dashboard (what runs at 8am daily)
-python daily.py --no-pull                       # sync + dashboard only, free
+python -m commands.refresh                      # pull + sync + dashboard (what the Pull button runs)
+python -m commands.refresh --no-pull            # sync + dashboard only, free
 python sync_notion.py --dry-run                 # what the Notion sync would change, free
 python sync_notion.py                           # jobs -> Notion tracker; never overwrites your columns
 python research.py --dry-run                    # which "Researching" jobs would get a brief
@@ -75,7 +75,7 @@ Automatic contact lookup is **blocked on the free Apify plan** (the actor allows
 Contacts now come from **LinkedIn search buttons** on every job in the dashboard
 ("Managers at X", "Analysts at X"): open, pick 3 people, add them to Contacts in Notion.
 Works for Seek jobs too. The two "Next" items about re-fetching and Seek contacts are closed.
-Stage 7 done 26 Sep: `research.py` (brief in Notion). Stage 8 done 26 Sep: `daily.py` runs at 8:00 via Task Scheduler (`schedule_daily.ps1 -Remove` stops it). All v1 stages done; v2 (goal → rubric generator) not started. Tests: 57.
+Stage 7 done 26 Sep: `research.py` (brief in Notion). Stage 8 done 26 Sep: `daily.py` runs at 8:00 via Task Scheduler (`schedule_daily.ps1 -Remove` stops it). **27 Sep: scheduler removed**; pulls are now on demand with the Pull latest jobs button (`python app.py`). All v1 stages done; v2 (goal → rubric generator) not started. Tests: 57.
 
 ## Next, in order
 
@@ -88,7 +88,7 @@ Stage 7 done 26 Sep: `research.py` (brief in Notion). Stage 8 done 26 Sep: `dail
 4. ~~Notion tracker~~ **Done 26 Sep** (`sync_notion.py`, 26 jobs). Awaiting your review. Was: A static HTML page cannot remember what you clicked, so status
    lives in Notion: applied · personalised outreach sent · artifact built · day-5 follow-up.
    `NOTION_TOKEN` is already in `.env`; `NOTION_DATABASE_ID` is not.
-5. **Daily scheduled pulls.**
+5. ~~Daily scheduled pulls.~~ **Removed 27 Sep**: replaced by the Pull latest jobs button.
 
 ## Open decisions, still yours to make
 

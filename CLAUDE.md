@@ -122,8 +122,7 @@ Known finding: sponsorship scored 0 on all 5 ads and salary was missing on every
 5. **LinkedIn Jobs as a third source.** Best-effort only. It will get blocked sometimes; the pipeline must not break when it does.
 6. **Contacts: 3 people per top company** (hiring manager etc.). Avoid fully scraping LinkedIn (ToS and ban risk). Agree the approach with the user at this stage.
 7. **Deep research + artifact starter.** For companies the user stars: research the company, identify gaps/pain points, suggest artifact ideas and who to contact.
-8. **Scheduling.** Daily automatic pulls.
-9. **(v2) Generalise.** Goal → rubric generator.
+8. **(v2) Generalise.** Goal → rubric generator.
 
 ## Outreach rules to respect (from the user's Notion page)
 

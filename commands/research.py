@@ -14,6 +14,11 @@ other (board "manual", Status "Researching"), then researched. Optional header l
 Uses ANTHROPIC_API_KEY (Claude + web search). Each brief is added to the bottom of
 the job's Notion page and the "Research brief" column gets today's date, so a job
 is not researched twice unless you ask with --refresh. Nothing is ever deleted.
+
+Each brief names the people to send the artifact to (how many and which kinds come
+from `contacts:` in the goal file): your LinkedIn connections there first, then
+people found on the web, each with a source. If the job's Contacts column is empty,
+they are written there too; if you've already filled it in, it is left alone.
 """
 
 import argparse
@@ -27,9 +32,9 @@ import yaml
 from jobmax import connections, contacts, notion as tracker, store
 from jobmax.ads import AdFormatError, from_record, load_ad
 from jobmax.config import MissingSecret, secret
-from jobmax.notion import (BRIEF, Notion, NotionError, append_blocks, create_row, ensure_columns,
+from jobmax.notion import (BRIEF, TEXT_LIMIT, Notion, NotionError, append_blocks, create_row, ensure_columns,
                            markdown_blocks, row_key)
-from jobmax.research import MODEL, build_prompt, research
+from jobmax.research import MODEL, build_prompt, people_from, research
 from jobmax.scorer import Rubric
 from jobmax.skills import SkillProfile
 from jobmax.sources import from_ad
@@ -37,7 +42,7 @@ from jobmax.sources import from_ad
 from jobmax.config import ROOT
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 sys.stderr.reconfigure(encoding="utf-8", errors="replace")
-ESTIMATE = "$0.40–0.60"  # per company; the first real run (Praemium, 6 searches) cost about $0.52
+ESTIMATE = "$0.60–0.90"  # per company; 6 searches cost $0.52–0.66, finding people adds up to 2 more
 
 
 def _plain(prop: dict) -> str:
@@ -108,7 +113,9 @@ def main() -> int:
 
     rubric = Rubric.load(args.goal)
     profile = SkillProfile.load(args.profile) if args.profile.exists() else None
-    rules = (yaml.safe_load(args.goal.read_text(encoding="utf-8-sig")).get("outreach") or {}).get("rules", [])
+    config = yaml.safe_load(args.goal.read_text(encoding="utf-8-sig"))
+    rules = (config.get("outreach") or {}).get("rules", [])
+    wanted = config.get("contacts") or {}
     ctx = {"notion": notion, "database_id": database_id, "rubric": rubric, "profile": profile}
 
     try:
@@ -177,7 +184,8 @@ def main() -> int:
         print(f"\n{company}: researching…", flush=True)
         prompt = build_prompt(job, rubric.score(from_record(job)), profile,
                               _plain(props.get("Contacts", {})), rules,
-                              connections.as_text(connections.known_at(job["company"], known)))
+                              connections.as_text(connections.known_at(job["company"], known)),
+                              wanted.get("mix", []), wanted.get("exclude_titles", []))
         try:
             brief = research(client, prompt)
         except (RuntimeError, anthropic.APIError) as err:
@@ -189,16 +197,23 @@ def main() -> int:
         note = {"object": "block", "type": "paragraph", "paragraph": {"rich_text": [
             {"text": {"content": f"Written by {brief.model} from web sources. Check the links before relying on it."},
              "annotations": {"italic": True, "color": "gray"}}]}}
+        update = {BRIEF: {"date": {"start": date.today().isoformat()}}}
+        people = people_from(brief.markdown)
+        if people and not _plain(props.get("Contacts", {})).strip():  # never overwrite your own list
+            update["Contacts"] = {"rich_text": [{"text": {"content": people[:TEXT_LIMIT]}}]}
         try:
             append_blocks(notion, page["id"], [heading, note] + markdown_blocks(brief.markdown))
-            notion.request("PATCH", f"pages/{page['id']}",
-                           {"properties": {BRIEF: {"date": {"start": date.today().isoformat()}}}})
+            notion.request("PATCH", f"pages/{page['id']}", {"properties": update})
         except NotionError as err:
             print(f"  researched but could not write to Notion: {err}")
             continue
         total += brief.cost_usd
         print(f"  written to Notion · {brief.searches} searches, {brief.results} pages found · "
               f"about ${brief.cost_usd:.2f}")
+        if people:
+            print("  People to send it to" + (" (also saved to Contacts):" if "Contacts" in update else ":"))
+            for line in people.splitlines():
+                print(f"    - {line}")
 
     print(f"\nDone. About ${total:.2f} in total (an upper estimate: cached reads are counted at full price).")
     return 0
