@@ -59,22 +59,22 @@ skills:
 
   - name: Databricks / Snowflake / Spark
     level: some
-    evidence: "coursework: NYC Taxi 1B rows on Databricks/Spark; YouTube lakehouse on Snowflake"
+    evidence: "repo data-engineering: NYC Taxi 1B rows on Databricks/Spark; YouTube lakehouse on Snowflake"
     phrases: [snowflake, databricks, spark, pyspark, bigquery, redshift]
 
   - name: Azure / AWS / GCP
-    level: none
-    evidence: ""
+    level: some
+    evidence: "repo data-engineering (coursework): Azure Blob Storage into Snowflake; Airflow on Google Cloud Composer"
     phrases: [azure, aws, gcp, google cloud]
 
   - name: dbt / data pipelines
     level: some
-    evidence: "coursework: Airbnb + Census ELT with Airflow + dbt"
+    evidence: "repo data-engineering: Airbnb + Census ELT with Airflow + dbt into a Postgres medallion warehouse"
     phrases: [dbt, etl, elt, data pipeline, airflow]
 
   - name: Git / version control
     level: strong
-    evidence: "22 public repos on GitHub (RatanaSovann)"
+    evidence: "26 public repos on GitHub (RatanaSovann)"
     phrases: [git, github, version control]
 
   - name: Process mapping tools
@@ -99,13 +99,13 @@ skills:
 
   - name: AI / LLM tools
     level: strong
-    evidence: "repo payroll_multi_agent: 6-agent Claude system, live demo; data_analyst_agent (LangGraph)"
+    evidence: "repo payroll_multi_agent: 6-agent Claude system, live demo; mcp_aqh: MCP server + 600-answer LLM eval; quote-brief-copilot; data_analyst_agent_V2 (LangGraph)"
     phrases: [generative ai, genai, llm, chatgpt, copilot, ai tool, prompt engineering]
 
   # --- analysis methods ----------------------------------------------------
   - name: Statistics / modelling
     level: strong
-    evidence: "Master of Data Science (GPA 6.47/7); repo Sydney-housing: regression, hypothesis testing"
+    evidence: "Master of Data Science (GPA 6.47/7); repo Sydney-housing: regression, hypothesis testing; customer-segmentation: K-Means, chi-square, noise baseline"
     phrases: [statistical, statistics, regression, hypothesis testing, a/b test,
               machine learning, predictive model]
 
@@ -138,7 +138,7 @@ skills:
 
   - name: Process improvement
     level: some
-    evidence: "automated manual reviews: payroll compliance (days → 90s), SBAA (frame-by-frame logging)"
+    evidence: "automated manual reviews: payroll compliance (days → 90s), SBAA (frame-by-frame logging); quote-brief-copilot (enquiry-to-quote workflow, timed per decision)"
     phrases: [process improvement, continuous improvement, process mapping, process map,
               current state, future state, lean, six sigma]
 
