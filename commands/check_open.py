@@ -1,6 +1,6 @@
 """Check which job ads have closed.
 
-    python -m commands.check_open              ads not checked in the last 2 days
+    python -m commands.check_open              ads not checked yet today
     python -m commands.check_open --all        every ad on the job list, closed ones too
     python -m commands.check_open --company ELMO
 
@@ -11,13 +11,14 @@ unclear is "unknown" and the job stays listed.
 
 Closed jobs drop off the job list page and aren't added to Notion. Rows already in
 Notion get the date in their "Ad closed" column. Nothing is deleted: re-run with
---all and a job that turns out to be open again comes back.
+--all and a job that turns out to be open again comes back. A job you removed
+yourself (the Remove button on the job list) is never re-checked.
 """
 
 import argparse
 import sys
 import time
-from datetime import date, timedelta
+from datetime import date
 
 from commands.pull import progress
 from jobmax import store
@@ -25,18 +26,19 @@ from jobmax.links import CLOSED, OPEN, still_open
 from jobmax.sources import too_old
 
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-RECHECK_DAYS = 2   # an ad checked this recently is skipped
 PAUSE = 0.5        # seconds between pages, to stay polite to the boards
 
 
 def due(job: dict, everything: bool) -> bool:
     status = job.get("ad_status") or {}
+    if status.get("by_you"):  # you removed it on the job list; your call stands
+        return False
     if everything:
         return True
     if status.get("state") == CLOSED:
         return False
-    checked = status.get("checked", "")
-    return status.get("state") != OPEN or checked < (date.today() - timedelta(days=RECHECK_DAYS)).isoformat()
+    # Ads close any day, so an open one is re-read once a day (a second pull that day skips it).
+    return status.get("state") != OPEN or status.get("checked", "") < date.today().isoformat()
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -49,7 +51,7 @@ def main(argv: list[str] | None = None) -> int:
     todo = [j for j in jobs if not too_old(j) and due(j, args.all or bool(args.company))
             and (not args.company or any(c.lower() in j["company"].lower() for c in args.company))]
     if not todo:
-        print("Every ad on the job list was checked in the last 2 days. Nothing to do.")
+        print("Every ad on the job list was already checked today. Nothing to do.")
         return 0
 
     print(f"Checking {len(todo)} ads…")

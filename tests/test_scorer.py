@@ -19,8 +19,8 @@ from jobmax.scorer import Rubric, find, parse_salary  # noqa: E402
 from jobmax.contacts import search_links, search_name  # noqa: E402
 from jobmax.skills import SkillProfile  # noqa: E402
 from jobmax.sources import from_ad, too_old  # noqa: E402
-from jobmax import connections  # noqa: E402
-from jobmax.notion import markdown_blocks  # noqa: E402
+from jobmax import connections, store  # noqa: E402
+from jobmax.notion import TEXT_LIMIT, description_blocks, markdown_blocks, units  # noqa: E402
 from jobmax.research import _search_outcomes, people_from  # noqa: E402
 from jobmax.links import _CLOSED_WORDS, _job_id, _job_postings, _salary, html_text  # noqa: E402
 from jobmax.sources import closed  # noqa: E402
@@ -100,8 +100,6 @@ results.append(check("ICT code named", r.likely_code, "ICT code (2611xx / 2613xx
 # --- no team named -------------------------------------------------------
 r = RUBRIC.score(ad("Reporting Analyst", "Build dashboards for a growing business."))
 results.append(check("no team = low confidence", r.confidence, "low"))
-results.append(check("no team asks the question",
-                     r.questions[0], "Which team does this role sit in?"))
 
 # --- off-target title beats everything -----------------------------------
 r = RUBRIC.score(ad(
@@ -114,6 +112,14 @@ results.append(check("off-target fit points", r.components[0].points, 0))
 # --- sponsorship ---------------------------------------------------------
 r = RUBRIC.score(ad("Process Analyst", "Visa sponsorship available for the right person."))
 results.append(check("sponsorship full points", r.components[1].points, 25))
+r = RUBRIC.score(ad("Process Analyst", "Please note Visa sponsorship WILL NOT be offered for this role."))
+results.append(check("sponsorship refusal knocked out", r.skipped, True))
+r = RUBRIC.score(ad("Process Analyst", "Sadly visa sponsorship isn't something we can't arrange; no exceptions."))
+results.append(check("sponsorship refusal scores 0", r.components[1].points, 0))
+r = RUBRIC.score(ad("Process Analyst", "You'll never be employee number 11,482 here."))
+results.append(check("bare visa number ignored", r.components[1].points, 0))
+r = RUBRIC.score(ad("Process Analyst", "We sponsor 482 visas for the right person."))
+results.append(check("482 visa counts", r.components[1].points, 25))
 
 # --- salary parsing ------------------------------------------------------
 results.append(check("range midpoint", parse_salary("$80,000 - $90,000 + super"), 85000))
@@ -125,6 +131,26 @@ results.append(check("company blurb number ignored", parse_salary("We serve 20,0
 
 r = RUBRIC.score(ad("Process Analyst", "Finance team role paying $75,000. Full-time."))
 results.append(check("mid salary band partial", r.components[2].points, 8))
+
+# --- employment type: the board's label wins over the ad's wording ----------
+facts = "Job facts (from the job board):\nEmployment type: {}\n\n"
+r = RUBRIC.score(ad("Data Analyst", facts.format("Contract/Temp") + "A 6 month role, full time hours."))
+results.append(check("Seek Contract/Temp label beats 'full time' in the ad", r.components[3].points, 11))
+r = RUBRIC.score(ad("Data Analyst", facts.format("Contract") + "Help us with contract management."))
+results.append(check("LinkedIn Contract label is not unknown", r.components[3].unknown, False))
+r = RUBRIC.score(ad("Data Analyst", facts.format("Part time") + "Flexible."))
+results.append(check("Seek Part time label", r.components[3].points, 7))
+r = RUBRIC.score(ad("Data Analyst", "We handle contract management for clients."))
+results.append(check("bare 'contract' in ad text is not a type", r.components[3].unknown, True))
+
+# --- work-type searches -----------------------------------------------------
+from jobmax.sources import LINKEDIN, SEEK, Search  # noqa: E402
+s = Search(titles=["Data Analyst"], location="Australia", rows=10, work_type="part_time")
+results.append(check("LinkedIn part-time filter", LINKEDIN.build_input(s).get("contractTypes"), ["P"]))
+results.append(check("Seek contract filter",
+                     SEEK.build_input(Search(["Data Analyst"], "Australia", 10, work_type="contract"))["workType"], "244"))
+results.append(check("main search has no work-type filter",
+                     "workType" in SEEK.build_input(Search(["Data Analyst"], "Australia", 20)), False))
 
 # --- phrase matching ------------------------------------------------------
 results.append(check("word boundary", find("Our capital city", ["api"]), []))
@@ -188,6 +214,10 @@ results.append(check("markdown link kept", blocks[1]["bulleted_list_item"]["rich
 results.append(check("bare address becomes a link",
                      blocks[4]["bulleted_list_item"]["rich_text"][0]["text"].get("link"),
                      {"url": "https://example.com/a"}))
+emoji_ad = "🚀 " * 1500  # 3,000 characters to Python, 4,500 to Notion
+chunks = [b["paragraph"]["rich_text"][0]["text"]["content"] for b in description_blocks(emoji_ad)[1:]]
+results.append(check("emoji-heavy ad fits Notion's cap and loses nothing",
+                     (max(map(units, chunks)) <= TEXT_LIMIT, "".join(chunks) == emoji_ad.strip()), (True, True)))
 Block = type("Block", (), {})
 ok, bad = Block(), Block()
 ok.type = bad.type = "web_search_tool_result"
@@ -227,6 +257,19 @@ results.append(check("job posted 30 days ago is kept",
 results.append(check("job with no posting date is kept", too_old({"posted": ""}), None))
 results.append(check("old job added from a link is kept", too_old({"posted": old_date, "added_from_link": True}), None))
 
+# --- AI lens (tag only, no points) ------------------------------------------
+results.append(check("AI in a finance team leans business",
+                     RUBRIC.score(ad("Analyst", "Join our finance team using generative AI and AI tools for process improvement.")).ai,
+                     ("business", "generative AI")))
+results.append(check("AI with user stories leans ICT",
+                     RUBRIC.score(ad("Analyst", "Use AI to write user stories with developers. AI tools.")).ai[0], "ict"))
+results.append(check("AI with no team is unclear", RUBRIC.score(ad("Analyst", "AI work. AI tools.")).ai, ("unclear", "AI")))
+results.append(check("one passing AI mention isn't tagged", RUBRIC.score(ad("Analyst", "Our AI-powered core.")).ai, None))
+results.append(check("AI in the title is enough", RUBRIC.score(ad("AI Analyst", "Reporting.")).ai, ("unclear", "AI")))
+results.append(check("no AI, no tag; 'Thai' isn't AI", RUBRIC.score(ad("Analyst", "Thai restaurant data.")).ai, None))
+plain, with_ai = (RUBRIC.score(ad("Analyst", "Join our finance team" + extra + ".")).total for extra in ("", " using AI and AI tools"))
+results.append(check("AI never changes the PR score", with_ai, plain))
+
 # --- is the ad still open? ------------------------------------------------
 results.append(check("closed wording spotted",
                      bool(_CLOSED_WORDS.search("Sorry, this job is no longer available.")), True))
@@ -242,6 +285,29 @@ results.append(check("ad never checked is due", due({}, False), True))
 results.append(check("closed ad isn't re-checked unless asked",
                      (due({"ad_status": {"state": "closed", "checked": "2026-01-01"}}, False),
                       due({"ad_status": {"state": "closed", "checked": "2026-01-01"}}, True)), (False, True)))
+yesterday = (date.today() - timedelta(days=1)).isoformat()
+results.append(check("open ad checked yesterday is due again", due({"ad_status": {"state": "open", "checked": yesterday}}, False), True))
+with tempfile.TemporaryDirectory() as tmp:
+    jobs_file = Path(tmp) / "jobs.json"
+    store.save([{"key": "a"}, {"key": "b"}], jobs_file)
+    removed = store.remove("b", jobs_file), store.remove("zzz", jobs_file)
+    b = store.load(jobs_file)[1]
+    results.append(check("Remove marks the ad closed; unknown key is refused",
+                         (removed, closed(b), due(b, True)), ((True, False), "you removed it", False)))
+
+gov = "The NSW Government is hiring a Process Improvement Analyst. Full-time."
+kept_ad = ad("Insights Analyst", gov)
+kept_ad.kept = True
+k = RUBRIC.score(kept_ad)
+results.append(check("Pursue anyway: scored like any job, rule kept as a warning",
+                     (k.skipped, k.total > 0, "Government department or agency" in " ".join(k.flags)),
+                     (False, True, True)))
+with tempfile.TemporaryDirectory() as tmp:
+    jobs_file = Path(tmp) / "jobs.json"
+    store.save([{"key": "a"}], jobs_file)
+    results.append(check("keep marks the job; unknown key is refused",
+                         (store.keep("a", jobs_file), store.keep("zzz", jobs_file),
+                          bool(store.load(jobs_file)[0].get("kept_by_you"))), (True, False, True)))
 
 # --- people named in a research brief -------------------------------------
 brief_md = ("## Snapshot\n- Makes software.\n## Who to send it to\n"

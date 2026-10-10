@@ -1,6 +1,7 @@
 """Pull jobs from the boards into data/jobs.json.
 
-    python -m commands.pull                                  primary keywords, LinkedIn + Seek, 20 jobs each
+    python -m commands.pull                                  primary keywords, LinkedIn + Seek, 20 jobs each,
+                                                             plus search.extra_work_types (contract, part-time)
     python -m commands.pull --source seek                    one board only
     python -m commands.pull --group core --rows 30
     python -m commands.pull --titles "Payroll Analyst" "Tax Analyst"
@@ -15,6 +16,8 @@ import argparse
 import json
 import os
 import sys
+from concurrent.futures import ThreadPoolExecutor
+from dataclasses import replace
 from pathlib import Path
 
 import yaml
@@ -64,7 +67,7 @@ def main() -> int:
             print(f"Can't tell which board {args.from_raw.name} came from.", file=sys.stderr)
             return 1
         items = json.loads(args.from_raw.read_text(encoding="utf-8-sig"))
-        return report_on({source.name: (items, None)}, exclude, args.from_raw, token=None)
+        return report_on([(source.name, source.name, items, None)], exclude, args.from_raw, token=None)
 
     groups = config.get("search_keywords", {})
     if args.titles:
@@ -83,26 +86,36 @@ def main() -> int:
         experience_levels=filters.get("experience_levels", []),
         exclude_title_words=exclude,
     )
+    # The main search is by relevance and comes back almost all full-time, so each
+    # extra work type gets its own small search on every board.
+    extra = filters.get("extra_work_types") or {}
+    searches = [search] + [replace(search, rows=extra.get("rows", 10), work_type=kind)
+                           for kind in extra.get("types", [])]
     sources = list(SOURCES.values()) if args.source == "all" else [SOURCES[args.source]]
 
     print(f"Titles    {', '.join(titles)}")
     print(f"Location  {search.location}")
     print(f"Levels    {', '.join(search.experience_levels) or 'any'}")
     print(f"Excluding titles with: {', '.join(exclude) or 'nothing'}")
-    print(f"Asking    {args.rows} jobs per board, posted in the last 30 days\n")
+    print(f"Asking    {args.rows} jobs per board, posted in the last 30 days")
+    for s in searches[1:]:
+        print(f"  plus    {s.rows} {s.work_type.replace('_', '-')} jobs per board")
+    print()
 
     plans = []
     for source in sources:
-        try:
-            request = source.build_input(search)
-        except ValueError as err:
-            print(f"Bad search filter in {args.goal.name} — {err}", file=sys.stderr)
-            return 1
-        estimate = source.price_per_run_usd + args.rows * source.price_per_item_usd
-        # Apify rejects any run capped under $0.05.
-        cap = args.max_cost if args.max_cost is not None else max(0.05, round(estimate * 1.5 + 0.01, 4))
-        plans.append((source, request, cap))
-        print(f"  {source.name:<9} {source.actor:<32} ~${estimate:.3f} · capped at ${cap:.4f}")
+        for s in searches:
+            try:
+                request = source.build_input(s)
+            except ValueError as err:
+                print(f"Bad search filter in {args.goal.name} — {err}", file=sys.stderr)
+                return 1
+            estimate = source.price_per_run_usd + s.rows * source.price_per_item_usd
+            # Apify rejects any run capped under $0.05.
+            cap = args.max_cost if args.max_cost is not None else max(0.05, round(estimate * 1.5 + 0.01, 4))
+            label = f"{source.name} {s.work_type.replace('_', '-')}".strip()
+            plans.append((source, label, s.rows, request, cap))
+            print(f"  {label:<19} {source.actor:<32} ~${estimate:.3f} · capped at ${cap:.4f}")
 
     if args.dry_run:
         print("\nDry run — nothing pulled, nothing charged.")
@@ -114,32 +127,40 @@ def main() -> int:
         print(f"\n{err}", file=sys.stderr)
         return 1
 
-    pulled, failed = {}, []
-    for i, (source, request, cap) in enumerate(plans):
-        print(f"\nRunning {source.name}… (a minute or two)")
-        # Each board gets an equal slice of the bar, filled as its jobs arrive.
-        progress(i / len(plans), f"{source.name}: starting")
+    # All searches run at once (each board is a separate Apify run), so a pull
+    # takes as long as the slowest board, not the sum of them.
+    done = [0.0] * len(plans)
+
+    def run(i, source, label, rows, request, cap):
+        def on_items(n):
+            done[i] = min(n, rows) / rows
+            progress(sum(done) / len(plans), f"{label}: {n} of {rows} jobs")
         try:
             items, cost = run_actor(
                 source.actor,
                 request,
                 token,
-                max_items=args.rows,
+                max_items=rows,
                 max_cost_usd=cap,
-                on_status=lambda s: print(f"  {s.lower()}"),
-                on_items=lambda n, i=i, name=source.name: progress(
-                    (i + min(n, args.rows) / args.rows) / len(plans),
-                    f"{name}: {n} of {args.rows} jobs"),
+                on_status=lambda s: print(f"  {label}: {s.lower()}"),
+                on_items=on_items,
             )
         except PullError as err:
             # Expected failure mode: a board blocks, the actor breaks, the
-            # network drops. The other board still runs; the store is untouched
+            # network drops. The other searches still run; the store is untouched
             # for this one, so tomorrow's pull just carries on.
-            print(f"  {source.name} failed — {err}", file=sys.stderr)
-            failed.append(source.name)
-            continue
-        store.save_raw(source.name, items)
-        pulled[source.name] = (items, cost)
+            print(f"  {label} failed — {err}", file=sys.stderr)
+            return None
+        # The label keeps two runs on one board apart ("linkedin-contract-…").
+        store.save_raw(label.replace(" ", "-"), items)
+        return source.name, label, items, cost
+
+    print(f"\nRunning {', '.join(plan[1] for plan in plans)} at the same time… (a minute or two)")
+    progress(0.0, "starting")
+    with ThreadPoolExecutor(max_workers=len(plans)) as pool:
+        outcomes = list(pool.map(lambda ip: run(ip[0], *ip[1]), enumerate(plans)))
+    pulled = [o for o in outcomes if o]
+    failed = [plan[1] for plan, o in zip(plans, outcomes) if not o]
 
     if not pulled:
         print("\nNothing was written. data/jobs.json is unchanged.", file=sys.stderr)
@@ -150,9 +171,10 @@ def main() -> int:
     return code
 
 
-def report_on(pulled: dict, exclude: list[str], raw_path, token) -> int:
+def report_on(pulled: list[tuple], exclude: list[str], raw_path, token) -> int:
+    """pulled: (source name, label, items, cost or None) per search run."""
     records, unusable, dropped = [], 0, []
-    for name, (items, cost) in pulled.items():
+    for name, label, items, cost in pulled:
         source = SOURCES[name]
         for item in items:
             record = source.to_record(item)
@@ -165,7 +187,7 @@ def report_on(pulled: dict, exclude: list[str], raw_path, token) -> int:
             else:
                 records.append(record)
         if cost is not None:
-            print(f"\n{name}: {len(items)} pulled, cost ${cost:.4f}")
+            print(f"\n{label}: {len(items)} pulled, cost ${cost:.4f}")
 
     report = store.merge(records, unusable=unusable)
 

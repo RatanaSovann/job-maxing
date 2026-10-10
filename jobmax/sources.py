@@ -52,6 +52,17 @@ class Search:
     # their side get them in the request (dropped jobs cost nothing); every
     # board's results are also checked by `too_senior()` after the pull.
     exclude_title_words: list[str] = field(default_factory=list)
+    # One of WORK_TYPES, or "" for any. Each board turns it into its own filter code.
+    work_type: str = ""
+
+
+WORK_TYPES = ("contract", "part_time")
+
+
+def _work_type_code(search: Search, codes: dict):
+    if search.work_type not in codes:
+        raise ValueError(f"Unknown work type '{search.work_type}'. Use one of: {', '.join(WORK_TYPES)}")
+    return codes[search.work_type]
 
 
 MAX_AGE_DAYS = 30  # the boards are asked for this window too; Seek's nearest option is 31 days
@@ -113,6 +124,9 @@ _LINKEDIN_LEVELS = {
     "director": "5",
 }
 
+# The actor's codes for Part-time, Contract, Temporary.
+_LINKEDIN_WORK_TYPES = {"contract": ["C", "T"], "part_time": ["P"]}
+
 
 def _linkedin_input(search: Search) -> dict:
     # LinkedIn has no "exclude words" option; senior titles are dropped after
@@ -130,6 +144,8 @@ def _linkedin_input(search: Search) -> dict:
     }
     if levels:
         request["experienceLevels"] = [_LINKEDIN_LEVELS[lv.lower()] for lv in levels]
+    if search.work_type:
+        request["contractTypes"] = _work_type_code(search, _LINKEDIN_WORK_TYPES)
     return request
 
 
@@ -201,6 +217,9 @@ LINKEDIN = Source(
 # charged, and returns the full description, salary and employment type.
 # Seek gives no LinkedIn company link, so contact lookup skips these jobs.
 
+# The actor's codes for "Contract/Temp" and "Part time". One per run.
+_SEEK_WORK_TYPES = {"contract": "244", "part_time": "243"}
+
 def _seek_input(search: Search) -> dict:
     request = {
         # The actor takes several searches as a JSON-encoded string, not a list.
@@ -213,6 +232,8 @@ def _seek_input(search: Search) -> dict:
         "includeDetails": True,
         "descriptionFormat": "text",
     }
+    if search.work_type:
+        request["workType"] = _work_type_code(search, _SEEK_WORK_TYPES)
     if search.exclude_title_words:
         request["excludeKeywords"] = [w.rstrip("*") for w in search.exclude_title_words]
         request["keywordMatchTitle"] = True  # title only, not the description

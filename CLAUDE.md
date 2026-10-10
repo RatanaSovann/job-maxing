@@ -65,7 +65,7 @@ Knocked-out jobs are **never hidden**. They appear in a Skipped list with the re
 - **Team decides, not title.** Finance, Strategy, Operations, Risk, People/HR, Research → target codes. IT, Technology, Engineering, Product, Digital → ICT codes.
 - **Language that raises fit:** process improvement, stakeholder analysis, business efficiency, reviewing systems and procedures, organisational problems, process re-engineering, pain points, operating models.
 - **Language that lowers fit:** requirements gathering, functional requirements, system specifications, user stories, acceptance criteria, software, working with developers, platform support.
-- If the ad doesn't say which team, **don't guess**. Mark confidence as low/medium and suggest asking "Which team does this role sit in?" in interview.
+- If the ad doesn't say which team, **don't guess**. Mark confidence as low/medium and list the team under Unknowns. (No "Ask in interview" line: removed 2026-10-10 at the user's request.)
 
 ### Deliberately NOT in the rubric
 
@@ -82,7 +82,6 @@ ELMO Software — AI Analyst · PR score 44
 - Why it scores: reports to Office of the CEO; "process re-engineering", "pain points"
 - Why it loses points: "functional requirements", "user stories" → ICT risk
 - ❓ Unknowns: salary, employment type
-- Ask in interview: "Which team does this role sit in?"
 ```
 
 The full job description is always saved alongside the card.

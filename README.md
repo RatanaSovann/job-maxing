@@ -80,7 +80,8 @@ February 2028; follow up on day 5.
 1. **Get new jobs.** Run `python app.py`: the job list opens in your browser. Click
    **Pull latest jobs**. New jobs are pulled, scored and sent to Notion, and the page
    reloads with them (2–4 minutes). Leave the terminal window open while you use it.
-2. **Pick a job you like.** In Notion set its Status to **Researching**, then run
+2. **Pick a job you like.** Open it on the job list and click **Research company** (twice:
+   it costs about $1). Or in Notion set its Status to **Researching**, then run
    `python -m commands.research`. A research brief appears on the job's Notion page.
 3. **Build the artifact** from one of the brief's ideas.
 4. **Check the 3 people** the brief names (also in the job's **Contacts** column).
@@ -128,7 +129,7 @@ with the reason quoted from the ad, so a rule that fires wrongly is easy to spot
 
 If salary or employment type isn't stated: half points, flagged with **?**.
 If the ad doesn't say which team, the score doesn't guess. Confidence is marked low,
-and the card suggests asking "Which team does this role sit in?" in interview.
+and the card lists the team under ❓ Unknowns.
 
 ### Skills fit (0–100)
 
@@ -148,10 +149,10 @@ Run these from the project folder in a terminal.
 | Command | What it does | Cost |
 |---|---|---|
 | `python app.py` | Open the job list with working **Pull latest jobs** and **Add job** buttons | free to open |
-| `python -m commands.refresh` | What the Pull button does: pull → Notion → dashboard | ~$0.04–0.08 |
+| `python -m commands.refresh` | What the Pull button does: pull → Notion → dashboard | ~$0.17 |
 | `python -m commands.refresh --no-pull` | Notion sync + dashboard only | free |
 | `python -m commands.pull --dry-run` | Show what a pull would fetch and cost | free |
-| `python -m commands.pull` | Pull 20 jobs from each of LinkedIn and Seek | ~$0.04–0.08 |
+| `python -m commands.pull` | Pull 20 jobs from each of LinkedIn and Seek (contract / part-time searches are off: `search.extra_work_types`) | ~$0.08 |
 | `python -m commands.pull --source seek` | One board only | less |
 | `python -m commands.pull --from-raw data/raw/<file>.json` | Re-read a saved pull | free |
 | `python -m commands.add LINK` | Add a job from its link (Seek, LinkedIn, careers pages) | free |
@@ -167,6 +168,7 @@ Run these from the project folder in a terminal.
 | `python -m commands.research --company Praemium` | Brief for one company, any status | ~$0.60–0.90 |
 | `python -m commands.research --company X --refresh` | A new brief even if one exists | ~$0.60–0.90 |
 | `python -m commands.research --ad my_job.txt` | Add + score + research a job not in the list | ~$0.60–0.90 |
+| `python -m commands.research --key seek:12345` | One job from your list (what the **Research company** button does) | ~$0.60–0.90 |
 | `python -m commands.score` | Score the hand-saved ads in `fixtures/` (calibration) | free |
 | `python tests/test_scorer.py` | Run the tests | free |
 | `python -m commands.find_contacts` | Automatic contact lookup. **Blocked on Apify's free plan**, see below | — |
@@ -220,7 +222,6 @@ Nothing about the goal is hard-coded. Change behaviour in these files, not the c
 | `anzsco` | Codes, which teams map to which code, and language that raises or lowers fit |
 | `sponsorship`, `salary`, `employment_type` | Points and phrases for each signal |
 | `flags` | Warnings shown on a job with no effect on points (e.g. Seek files it under ICT) |
-| `questions` | What to ask in interview when something is unknown |
 | `search` | Where to pull from, and title words never to store (senior, lead, manager…) |
 | `search_keywords` | The job titles each pull searches for |
 | `contacts` | Who to look for at a company, and the one-word LinkedIn searches (`search: manager`) |
@@ -256,7 +257,11 @@ browsing, but the buttons don't work. Rebuilding is free.
 
 - **Tiles:** jobs to look at · top picks (PR 40+) · strong on both (PR 40+ and
   Skills 60+) · skipped. Click one to filter.
-- **Search, sort** (PR score, Skills fit, Newest), board filter, hide agencies.
+- **Search, sort** (PR score, Skills fit, Newest), board filter, hide agencies, AI roles only.
+- **AI tag:** jobs with AI in the title, or mentioned at least twice, are tagged
+  **AI · business side** (a target team or process language, so 224712), **AI · ICT risk**
+  (a tech team or ICT language), or plain **AI** (can't tell). It never changes the PR
+  score. The word list is `ai_lens:` in the goal file.
 - **Click a job** to see why it scored, its skills chips, links (the ad,
   **Track in Notion**, company LinkedIn), people to contact, and the full ad.
 - Jobs whose **ad has closed** drop off the page too (see [Pulling new jobs](#pulling-new-jobs)).
@@ -311,7 +316,7 @@ brief to the bottom of its Notion page:
 - **Opening line:** follows the outreach rules
 - **Sources:** clickable links
 
-Claude Opus 5 with web search (up to 8 searches, about $0.60–0.90 a company).
+Claude Opus 5 with web search (up to 15 searches, about $0.90–1.50 a company).
 People are only looked up for companies you research, so you only pay for the ones
 you're pursuing. Check each person's LinkedIn before reaching out: people move jobs. The **Research brief** column gets
 the date, so a job isn't researched twice (use `--refresh` for a new brief). If the
@@ -379,12 +384,19 @@ There is no automatic daily run. You pull when you want new jobs, with the
 - **Budget guard:** skips the pull if it could take this month's Apify spend past 80%
   of the limit.
 - **Research is never part of a pull:** it costs money and needs your choice.
-- **Closed ads:** after pulling, every listed ad not checked in the last 2 days is
+- **Closed ads:** after pulling, every listed ad not already checked today is
   re-read (free) to see if it has closed. Seek says when an ad has expired; LinkedIn
   shows "No longer accepting applications"; other sites are closed when the page is
   gone, the closing date has passed, or it says so. Anything unclear counts as
   "couldn't tell" and the job stays listed. Research also checks the ad first and
   skips a closed one, unless you name the company with `--company`.
+- **Spotted a closed ad yourself?** Open the job on the list and click
+  **Remove: ad closed** (twice, so a stray click does nothing). It is marked closed
+  like any other closed ad, and the ad check never brings it back.
+- **A skipped job you want anyway?** Open it in the Skipped list and click
+  **Pursue anyway → Notion**. It gets its real PR score, moves to the main list
+  (tagged "you kept it"), and the free refresh sends it to Notion. The rule it broke
+  stays on it as a ⚠ warning.
 - Log of each run: `data/logs/refresh-<date>.log`.
 
 ---
@@ -393,7 +405,7 @@ There is no automatic daily run. You pull when you want new jobs, with the
 
 | What | Service | Cost |
 |---|---|---|
-| One pull (20 LinkedIn + 20 Seek) | Apify | ~$0.04–0.08, capped at $0.14 |
+| One pull (20 from each of LinkedIn and Seek) | Apify | ~$0.08, capped at $0.35 |
 | Pulling every day for a month | Apify | ~$1–2.50 (free plan limit: $10/month) |
 | One research brief (with 3 people) | Anthropic | ~$0.60–0.90 |
 | Adding a job from a link | — | free |

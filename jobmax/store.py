@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -81,6 +81,35 @@ def save(jobs: list[dict], path: Path = STORE) -> None:
     temp = path.with_suffix(".json.tmp")
     temp.write_text(json.dumps(jobs, indent=1, ensure_ascii=False), encoding="utf-8")
     temp.replace(path)
+
+
+def _change(key: str, fields: dict, path: Path) -> bool:
+    """Set fields on the job with this key and save. False if no job has that key."""
+    jobs = load(path)
+    for job in jobs:
+        if job["key"] == key:
+            job.update(fields)
+            save(jobs, path)
+            return True
+    return False
+
+
+def remove(key: str, path: Path = STORE) -> bool:
+    """Mark a job's ad closed because you spotted it (the job list's Remove button).
+
+    It then drops off the job list like any closed ad, and the ad check never reopens it.
+    """
+    return _change(key, {"ad_status": {"state": "closed", "why": "you removed it", "by_you": True,
+                                       "checked": date.today().isoformat()}}, path)
+
+
+def keep(key: str, path: Path = STORE) -> bool:
+    """Pursue a job the rules skipped (the Skipped list's "Pursue anyway" button).
+
+    It is then scored like any other job, listed, and sent to Notion; the rule it
+    broke stays on it as a warning.
+    """
+    return _change(key, {"kept_by_you": date.today().isoformat()}, path)
 
 
 def coverage(records: list[dict]) -> list[tuple[str, int, int]]:

@@ -30,6 +30,7 @@ class Ad:
     source: str = ""
     location: str = ""
     path: Path | None = None
+    kept: bool = False  # you chose to pursue it though the rules skip it
     extra: dict = field(default_factory=dict)
 
     @property
@@ -99,6 +100,7 @@ def from_record(record: dict) -> Ad:
         description=record["description"],
         source=record.get("url", ""),
         location=record.get("location", ""),
+        kept=bool(record.get("kept_by_you")),
         extra=record,
     )
 

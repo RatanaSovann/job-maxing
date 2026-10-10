@@ -10,8 +10,9 @@ Notion or the dashboard from updating. Output goes to data/logs/refresh-<date>.l
 
 Budget guard: before pulling, it checks this month's Apify spend and skips the
 pull if it could take spend past BUDGET_SHARE of the monthly limit. Research
-(commands/research.py) is never part of this: it costs money per company and
-needs you to choose the company.
+(commands/research.py) is never part of a refresh: it costs money per company and
+needs you to choose the company. The dashboard's Research button runs it through
+run(research=key) for the one job you picked.
 """
 
 import argparse
@@ -28,7 +29,7 @@ from jobmax.store import DATA
 
 LOGS = DATA / "logs"
 BUDGET_SHARE = 0.8     # pulls stop at 80% of the monthly Apify limit
-PULL_MAX_COST = 0.14   # the most one pull can cost: both boards' caps (see pull --dry-run)
+PULL_MAX_COST = 0.35   # the most one pull can cost: every search's cap added up (see pull --dry-run)
 
 
 def _pull_allowed() -> tuple[bool, str]:
@@ -45,6 +46,7 @@ def _pull_allowed() -> tuple[bool, str]:
 
 
 def run(say: Callable[[str], None], pull: bool = True, links: list[str] | None = None,
+        research: str | None = None,
         on_step: Callable[[int, int, str], None] = lambda i, n, name: None,
         on_progress: Callable[[float, str], None] = lambda part, text: None) -> list[str]:
     """Run every step, passing each output line to say() as it happens.
@@ -52,6 +54,8 @@ def run(say: Callable[[str], None], pull: bool = True, links: list[str] | None =
     on_step(i, n, name) is called as step i of n starts. on_progress(part, text) reports
     how far through the current step it is (0-1), for steps that can tell (the pull).
     links: jobs to add from pasted links (commands/add.py) instead of pulling.
+    research: one job's key to research (commands/research.py, costs ~$1) instead of
+    the usual steps; then the page is rebuilt so its "Track in Notion" link appears.
     Returns the names of failed steps.
     Everything is also written to today's log.
     """
@@ -63,11 +67,13 @@ def run(say: Callable[[str], None], pull: bool = True, links: list[str] | None =
             log.write(line + "\n")
             log.flush()
 
-        out(f"=== {datetime.now():%Y-%m-%d %H:%M} refresh ===")
+        out(f"=== {datetime.now():%Y-%m-%d %H:%M} {'research' if research else 'refresh'} ===")
         steps = [("Checking which ads have closed", ["commands.check_open"]),
                  ("Sending to Notion", ["commands.sync_notion"]),
                  ("Rebuilding the job list", ["commands.dashboard"])]
-        if links:
+        if research:
+            steps = [("Researching the company", ["commands.research", "--key", research]), steps[-1]]
+        elif links:
             out("Pull: skipped (adding from a link)")
             steps.insert(0, ("Adding the job", ["commands.add", *links]))
         elif pull:

@@ -22,7 +22,7 @@ from .store import DATA
 
 API = "https://api.notion.com/v1"
 VERSION = "2022-06-28"
-TEXT_LIMIT = 2000  # Notion's cap on one piece of text
+TEXT_LIMIT = 2000  # Notion's cap on one piece of text, counted in UTF-16 units (an emoji is 2)
 PAGES = DATA / "notion_pages.json"  # job key -> its Notion page, written by each sync
 
 TITLE = "Role"
@@ -154,8 +154,18 @@ def row_key(page: dict) -> str:
 # a job -> a row
 # --------------------------------------------------------------------------
 
+def units(text: str) -> int:
+    """Length as Notion counts it: UTF-16 units, so an emoji counts as 2 where Python's len() says 1."""
+    return len(text.encode("utf-16-le")) // 2
+
+
+def clip(text: str, limit: int = TEXT_LIMIT) -> str:
+    """The longest start of text that fits Notion's cap, never splitting an emoji in half."""
+    return text.encode("utf-16-le")[:limit * 2].decode("utf-16-le", "ignore")
+
+
 def _text(value: str) -> dict:
-    value = value[:TEXT_LIMIT]
+    value = clip(value)
     return {"rich_text": [{"text": {"content": value}}] if value else []}
 
 
@@ -171,7 +181,7 @@ def tool_properties(job: dict, result: Result, fit: SkillFit | None) -> dict:
     """The columns a sync owns. Safe to rewrite every time."""
     code = result.likely_code + (f" · {result.confidence} confidence" if result.confidence else "")
     return {
-        TITLE: {"title": [{"text": {"content": job["role"][:TEXT_LIMIT]}}]},
+        TITLE: {"title": [{"text": {"content": clip(job["role"])}}]},
         "Company": _text(job["company"]),
         "PR score": {"number": result.total},
         "Skills fit": {"number": fit.score if fit else None},
@@ -214,8 +224,9 @@ def description_blocks(description: str) -> list[dict]:
     for para in description.split("\n\n"):
         para = para.strip()
         while para:
-            piece, para = para[:TEXT_LIMIT], para[TEXT_LIMIT:]
-            if chunks and len(chunks[-1]) + len(piece) + 2 <= TEXT_LIMIT:
+            piece = clip(para)
+            para = para[len(piece):]
+            if chunks and units(chunks[-1]) + units(piece) + 2 <= TEXT_LIMIT:
                 chunks[-1] += "\n\n" + piece
             else:
                 chunks.append(piece)
@@ -250,7 +261,7 @@ def _rich(text: str) -> list[dict]:
     if at < len(text):
         parts.append({"text": {"content": text[at:]}})
     for part in parts:
-        part["text"]["content"] = part["text"]["content"][:TEXT_LIMIT]
+        part["text"]["content"] = clip(part["text"]["content"])
     return parts
 
 

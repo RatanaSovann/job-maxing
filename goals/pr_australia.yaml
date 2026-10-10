@@ -28,6 +28,16 @@ knockouts:
       - no visa sponsorship
       - unable to sponsor
       - we do not offer sponsorship
+      - sponsorship will not be offered
+      - sponsorship is not offered
+      - sponsorship is not available
+      - sponsorship not available
+      - not offer sponsorship
+      - not offer visa sponsorship
+      - not provide sponsorship
+      - not provide visa sponsorship
+      - not able to sponsor
+      - cannot sponsor
 
   - id: security_clearance
     reason: Security clearance required
@@ -344,14 +354,32 @@ sponsorship:
     - will consider sponsorship
     - able to sponsor
     - happy to sponsor
-    - "482"
-    - "494"
-    - "186"
+    # Visa numbers only next to "visa" / "subclass": a bare "482" matched
+    # "employee number 11,482" (First Focus).
+    - 482 visa
+    - 494 visa
+    - 186 visa
+    - subclass 482
+    - subclass 494
+    - subclass 186
     - tss visa
     - skilled visa
     - international applicants welcome
     - we welcome international applicants
     - open to candidates requiring sponsorship
+  # A phrase above in a sentence with one of these words is a refusal, not an
+  # offer: no points. Catches wordings the knockout list misses ("Visa
+  # sponsorship WILL NOT be offered" scored 25 for Codafication).
+  refusal_words:
+    - not
+    - "no"
+    - unable
+    - cannot
+    - can't
+    - can’t
+    - won't
+    - won’t
+    - unfortunately
 
 # --- Salary: 15 points -----------------------------------------------------
 # Midpoint of a stated range is used. Not stated = half points, flagged "?".
@@ -376,6 +404,10 @@ employment_type:
   unknown: half
   # Checked in order; the first match wins, so best-case wording wins when an
   # ad offers several (e.g. "full-time or part-time").
+  # The board's "Employment type" field is checked first and wins over the ad's
+  # wording. `labels` are matched in that field only (LinkedIn says "Contract",
+  # "Temporary"; Seek says "Contract/Temp", "Casual/Vacation"), since a bare
+  # "contract" in the ad text could mean anything.
   types:
     - id: full_time
       points: 15
@@ -391,6 +423,7 @@ employment_type:
     - id: contract
       points: 11
       label: Contract (6-12 months)
+      labels: [contract, temporary, temp]
       phrases:
         - fixed term
         - fixed-term
@@ -414,19 +447,11 @@ employment_type:
       points: 0
       label: Casual
       note: Casual hours rarely reach 20/week reliably.
+      labels: [casual]
       phrases:
         - casual role
         - casual position
         - casual basis
-
-# ---------------------------------------------------------------------------
-# What to ask in an interview when the ad leaves something out.
-# ---------------------------------------------------------------------------
-questions:
-  team_unclear: "Which team does this role sit in?"
-  salary_unknown: "What's the salary range for this role?"
-  type_unknown: "Is this role full-time, part-time or a contract?"
-  part_time_hours: "How many hours a week is the part-time load?"
 
 # ---------------------------------------------------------------------------
 # Search filters (used by the job puller, before any scoring).
@@ -440,6 +465,14 @@ search:
   # LinkedIn's levels, if ever needed: Internship, Entry level, Associate,
   # Mid-Senior level, Director.
   experience_levels: []
+  # The main search is by relevance and comes back almost all full-time (0
+  # part-time in 320 jobs pulled to 6 Oct 2026). Each type here gets its own
+  # small search on every board, `rows` jobs each. Empty `types` turns it off.
+  # Turned off 10 Oct 2026: contract and part-time took over the list (35 of
+  # 90 jobs). Put [contract, part_time] back to pull them again (~$0.09 more).
+  extra_work_types:
+    rows: 10
+    types: []
   # No senior-level jobs. A title containing any of these words (as a whole
   # word) is never stored. Seek drops them before charging; LinkedIn cannot,
   # so they are paid for and then dropped. Dropped titles are listed after
@@ -454,6 +487,32 @@ search:
     - manager
     - director
     - chief
+
+# ---------------------------------------------------------------------------
+# AI lens: analyst work that also uses AI. A tag and an "AI roles only" filter
+# on the job list; it never changes the PR score. The tag says which way the
+# job leans: "business" (a target team or process language, so 224712) or
+# "ICT risk" (a tech team or ICT language), judged with the anzsco lists above.
+# ---------------------------------------------------------------------------
+ai_lens:
+  # AI must be in the job title, or mentioned this many times in the ad, so a
+  # line of company blurb ("an AI-powered core") doesn't tag the job.
+  min_mentions: 2
+  phrases:
+    - ai
+    - artificial intelligence
+    - generative ai
+    - genai
+    - gen ai
+    - llm
+    - large language model
+    - machine learning
+    - chatgpt
+    - copilot
+    - ai tool
+    - ai agent
+    - prompt engineering
+    - intelligent automation
 
 # ---------------------------------------------------------------------------
 # Search keywords (used from Stage 2 onwards by the job puller).
@@ -471,6 +530,10 @@ search_keywords:
     # "Quality Analyst" dropped 26 Sep 2026: it pulls software-testing jobs
     # (QA Engineer, Manual Tester, SAP Test Analyst), which are ICT work.
     - Continuous Improvement Analyst
+    # Added 28 Sep 2026: analyst work that also uses AI (see ai_lens).
+    - AI Business Analyst
+    - AI Transformation Analyst
+    - Automation Analyst
   core:      # broad volume, either target code depending on the team
     - Data Analyst
     - Reporting Analyst

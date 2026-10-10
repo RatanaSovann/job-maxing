@@ -12,7 +12,7 @@ from pathlib import Path
 
 import yaml
 
-from .ads import Ad
+from .ads import Ad, job_fact
 
 
 # --------------------------------------------------------------------------
@@ -96,8 +96,10 @@ class Result:
     helps: list[str] = field(default_factory=list)
     hurts: list[str] = field(default_factory=list)
     unknowns: list[str] = field(default_factory=list)
-    questions: list[str] = field(default_factory=list)
     flags: list[str] = field(default_factory=list)  # warnings, no points
+    team: str = ""  # which ANZSCO team family matched: a teams id, "off_target" or "none"
+    employment: str = ""  # which employment_type matched: a types id, or "" if not stated
+    ai: tuple[str, str] | None = None  # ("business" / "ict" / "unclear", quote), no points
 
     @property
     def skipped(self) -> bool:
@@ -167,6 +169,7 @@ class Rubric:
             confidence = off.get("confidence", "medium")
             basis = f'title says "{title_hits[0].quote}" — not analyst work under any target code'
             result.hurts.append(basis)
+            result.team = "off_target"
         else:
             for team in cfg.get("teams", []):
                 hits = find(text, team.get("phrases", []))
@@ -176,6 +179,7 @@ class Rubric:
                     confidence = team.get("confidence", "medium")
                     basis = f'{team["label"]}: "{hits[0].quote}"'
                     (result.hurts if team["id"] == "ict" else result.helps).append(basis)
+                    result.team = team["id"]
                     break
             else:
                 no_team = cfg["no_team"]
@@ -183,10 +187,8 @@ class Rubric:
                 code = codes.get(no_team.get("code_ref"), "")
                 confidence = no_team.get("confidence", "low")
                 basis = "no team named in the ad — not guessing"
+                result.team = "none"
                 result.unknowns.append("which team the role sits in")
-                question = self.config.get("questions", {}).get("team_unclear")
-                if question:
-                    result.questions.append(question)
 
         language = cfg.get("language", {})
         up_cfg, down_cfg = language.get("raise", {}), language.get("lower", {})
@@ -209,6 +211,11 @@ class Rubric:
     def _sponsorship(self, ad: Ad, result: Result) -> Component:
         cfg = self.config["sponsorship"]
         hits = find(ad.text, cfg.get("phrases", []))
+        # "Visa sponsorship WILL NOT be offered" is a refusal, not a signal.
+        refused = [h for h in hits if find(_sentence(ad.text, h), cfg.get("refusal_words", []))]
+        hits = [h for h in hits if h not in refused]
+        if refused:
+            result.hurts.append(f'ad says no sponsorship: "…{_sentence(ad.text, refused[0])}…"')
         if hits:
             result.helps.append("sponsorship signal: " + _quoted(hits))
             return Component("Sponsorship signal", cfg["max_points"], cfg["max_points"], _quoted(hits))
@@ -221,9 +228,6 @@ class Rubric:
         amount = parse_salary(ad.description)
         if amount is None:
             result.unknowns.append("salary")
-            question = self.config.get("questions", {}).get("salary_unknown")
-            if question:
-                result.questions.append(question)
             return Component("Salary", max_points / 2, max_points, "not stated — half points", True)
 
         for band in cfg.get("bands", []):
@@ -238,47 +242,86 @@ class Rubric:
     def _employment(self, ad: Ad, result: Result) -> Component:
         cfg = self.config["employment_type"]
         max_points = cfg["max_points"]
-        for kind in cfg.get("types", []):
-            hits = find(ad.text, kind.get("phrases", []))
-            if not hits:
-                continue
+        types = cfg.get("types", [])
+        # The board's own label wins over the ad's wording: a contract whose ad
+        # says "full time hours" is still a contract. `labels` are only safe
+        # there ("contract" alone in the ad could be "contract management").
+        board = job_fact(ad.description, "Employment type")
+        found = board and next(((kind, hits) for kind in types
+                                if (hits := find(board, kind.get("labels", []) + kind.get("phrases", [])))), None)
+        found = found or next(((kind, hits) for kind in types
+                               if (hits := find(ad.text, kind.get("phrases", [])))), None)
+        if found:
+            kind, hits = found
+            result.employment = kind["id"]
             detail = f'{kind["label"]}: "{hits[0].quote}"'
             if kind.get("note"):
                 result.unknowns.append(kind["note"])
-                if kind["id"] == "part_time":
-                    question = self.config.get("questions", {}).get("part_time_hours")
-                    if question:
-                        result.questions.append(question)
             if kind["points"] < max_points:
                 result.hurts.append(f'employment type: {kind["label"]}')
             return Component("Employment type", float(kind["points"]), max_points, detail)
 
         result.unknowns.append("employment type")
-        question = self.config.get("questions", {}).get("type_unknown")
-        if question:
-            result.questions.append(question)
         return Component("Employment type", max_points / 2, max_points, "not stated — half points", True)
+
+    # -- AI lens (a filter on the job list, never points) --------------------
+    def _ai(self, ad: Ad, result: Result) -> tuple[str, str] | None:
+        """Whether the ad involves AI, and which way it leans for PR.
+
+        "business": AI used to improve how a business runs (a target team, or process
+        language), which reads as 224712. "ict": AI built in a tech team, or ICT
+        language, which reads as an ICT code. "unclear": neither shows.
+
+        Needs AI in the title or `min_mentions` times in the ad, so one line of
+        company blurb ("an AI-powered core") doesn't count.
+        """
+        cfg = self.config.get("ai_lens", {})
+        phrases = cfg.get("phrases", [])
+        in_title = find(ad.role, phrases)
+        mentions = {m.start() for p in phrases for m in _pattern(str(p)).finditer(ad.text)}
+        if not in_title and len(mentions) < max(1, cfg.get("min_mentions", 1)):
+            return None
+        quote = (in_title or find(ad.text, phrases))[0].quote
+        language = self.config["anzsco"].get("language", {})
+        if result.team in ("ict", "off_target") or find(ad.text, language.get("lower", {}).get("phrases", [])):
+            kind = "ict"
+        elif result.team == "target" or find(ad.text, language.get("raise", {}).get("phrases", [])):
+            kind = "business"
+        else:
+            kind = "unclear"
+        return kind, quote
 
     # -- entry point -------------------------------------------------------
     def score(self, ad: Ad) -> Result:
         result = Result(ad=ad)
         result.flags = self._flags(ad)
-        result.knockouts = self._knockouts(ad)
-        if result.knockouts:
-            return result
-
-        result.components = [
-            self._anzsco(ad, result),
-            self._sponsorship(ad, result),
-            self._salary(ad, result),
-            self._employment(ad, result),
-        ]
-        result.total = round(sum(c.points for c in result.components))
+        knockouts = self._knockouts(ad)
+        if ad.kept:  # you chose to pursue it: score it anyway, but keep the rule in sight
+            result.flags += [f"You kept this, though the rules skip it: {why} (“…{quote}…”)"
+                             for why, quote in knockouts]
+        else:
+            result.knockouts = knockouts
+        if not result.knockouts:
+            result.components = [
+                self._anzsco(ad, result),
+                self._sponsorship(ad, result),
+                self._salary(ad, result),
+                self._employment(ad, result),
+            ]
+            result.total = round(sum(c.points for c in result.components))
+        result.ai = self._ai(ad, result)
         return result
 
 
 def _quoted(hits: list[Match]) -> str:
     return ", ".join(f'"{h.quote}"' for h in hits)
+
+
+def _sentence(text: str, hit: Match) -> str:
+    """The sentence (or line) the hit sits in."""
+    start = max(text.rfind(c, 0, hit.start) for c in ".!?\n") + 1
+    ends = [i for c in ".!?\n" if (i := text.find(c, hit.end)) != -1]
+    return " ".join(text[start : min(ends, default=len(text))].split())
 
 
 # --------------------------------------------------------------------------

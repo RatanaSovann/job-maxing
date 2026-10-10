@@ -16,7 +16,7 @@ from .scorer import Result
 from .skills import SkillProfile
 
 MODEL = "claude-opus-5"
-MAX_SEARCHES = 8          # web searches per company (2 of them for finding people); the main cost lever after tokens
+MAX_SEARCHES = 15         # web searches per company (a few for finding people); the main cost lever after tokens
 MAX_CONTINUATIONS = 5     # resumes of a long server-side search turn (pause_turn)
 
 # For the cost line printed after each company. Claude Opus 5 list prices.

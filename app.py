@@ -4,7 +4,11 @@
     python app.py --port 9000
 
 The button runs commands/refresh.py (pull → Notion → rebuild the page) and shows
-its progress live. The "Add job" box does the same with a pasted link instead of a pull. Leave this window open while you use the page; Ctrl+C stops it.
+its progress live. The "Add job" box does the same with a pasted link instead of a pull.
+Each job's "Remove" button marks its ad closed and rebuilds the page. A skipped job's
+"Pursue anyway" button lists it after all and runs the free refresh, so it lands in Notion.
+A job's "Research company" button runs commands/research.py for that one job (~$1, asks
+first) and writes the brief into its Notion page. Leave this window open while you use the page; Ctrl+C stops it.
 Only this computer can reach it (it listens on 127.0.0.1).
 """
 
@@ -20,6 +24,7 @@ from urllib.parse import parse_qs, urlsplit
 
 from commands import refresh
 from commands.dashboard import main as build_dashboard
+from jobmax import store
 from jobmax.config import ROOT
 
 PAGE = ROOT / "out" / "dashboard.html"
@@ -98,21 +103,67 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         # Pulls cost money. A custom header can't be sent by another website without a
         # CORS preflight, which this server never approves, so only the page itself can start one.
-        if self.path not in ("/pull", "/add") or self.headers.get("X-Jobmax") != "1":
+        if (self.path not in ("/pull", "/add", "/remove", "/keep", "/research")
+                or self.headers.get("X-Jobmax") != "1"):
             self._send(HTTPStatus.FORBIDDEN, b"Forbidden", "text/plain")
+            return
+        if self.path == "/remove":
+            self._remove()
+            return
+        if self.path == "/keep":
+            self._keep()
             return
         if self.path == "/pull":
             started = PROGRESS.start()
+        elif self.path == "/research":
+            key = self._body().get("key")
+            # Passed to a subprocess as one argument (no shell), but still only accept a listed job.
+            if not (isinstance(key, str) and any(job["key"] == key for job in store.load())):
+                self._json({"error": "That job isn't in data/jobs.json any more."}, HTTPStatus.NOT_FOUND)
+                return
+            started = PROGRESS.start(research=key)
         else:
-            try:
-                length = int(self.headers.get("Content-Length") or 0)
-                link = json.loads(self.rfile.read(min(length, 10_000)) or b"{}").get("url", "")
-            except (ValueError, AttributeError):
-                link = ""
+            link = self._body().get("url", "")
             if not (isinstance(link, str) and link.strip().startswith(("http://", "https://"))):
                 self._json({"error": "Paste a full link, starting with https://"}, HTTPStatus.BAD_REQUEST)
                 return
             started = PROGRESS.start(links=[link.strip()])
+        self._json({"started": started}, HTTPStatus.ACCEPTED if started else HTTPStatus.CONFLICT)
+
+    def _body(self) -> dict:
+        try:
+            length = int(self.headers.get("Content-Length") or 0)
+            data = json.loads(self.rfile.read(min(length, 10_000)) or b"{}")
+        except ValueError:
+            return {}
+        return data if isinstance(data, dict) else {}
+
+    def _remove(self):
+        key = self._body().get("key")
+        # Holding PROGRESS.lock stops a pull (or another Remove) from starting while the store
+        # and page are rewritten, so neither loses the other's change.
+        with PROGRESS.lock:
+            if PROGRESS.running:
+                self._json({"error": "A pull is running. Remove the job once it finishes."}, HTTPStatus.CONFLICT)
+                return
+            if not (isinstance(key, str) and store.remove(key)):
+                self._json({"error": "That job isn't in data/jobs.json any more."}, HTTPStatus.NOT_FOUND)
+                return
+            build_dashboard([])  # so a reload doesn't bring it back
+        self._json({"removed": key})
+
+    def _keep(self):
+        key = self._body().get("key")
+        with PROGRESS.lock:  # as in _remove: don't rewrite the store under a running pull
+            if PROGRESS.running:
+                self._json({"error": "A pull is running. Try again once it finishes."}, HTTPStatus.CONFLICT)
+                return
+            if not (isinstance(key, str) and store.keep(key)):
+                self._json({"error": "That job isn't in data/jobs.json any more."}, HTTPStatus.NOT_FOUND)
+                return
+        # The free refresh (no pull) sends it to Notion and rebuilds the page. If another
+        # refresh slipped in first, that one picks the job up instead.
+        started = PROGRESS.start(pull=False)
         self._json({"started": started}, HTTPStatus.ACCEPTED if started else HTTPStatus.CONFLICT)
 
     def _json(self, data: dict, status=HTTPStatus.OK):

@@ -89,8 +89,6 @@ def _explain(result: Result) -> str:
     if result.unknowns:
         parts.append('<p class="q">❓ Unknowns: ' +
                      escape(", ".join(dict.fromkeys(result.unknowns))) + "</p>")
-    for question in dict.fromkeys(result.questions):
-        parts.append(f'<p class="q">Ask in interview: “{escape(question)}”</p>')
     return "".join(parts)
 
 
@@ -253,6 +251,11 @@ details.job[open] .chev { transform:rotate(90deg); }
        border-radius:8px; padding:6px 12px; background:var(--bg); }
 .btn:hover { border-color:var(--muted); }
 .btn.primary { background:var(--accent); border-color:var(--accent); color:var(--bg); font-weight:600; }
+button.btn { font:inherit; font-size:13px; cursor:pointer; }
+.btn.remove { color:var(--bad); }
+.btn.remove.armed { border-color:var(--bad); }
+.btn[data-research].armed { border-color:var(--warn); color:var(--warn); }
+.btn.keep { color:var(--good); border-color:var(--good); }
 .person { margin:0 0 10px; font-size:13.5px; }
 .person a { color:inherit; font-weight:600; }
 .person .t { color:var(--muted); }
@@ -277,7 +280,7 @@ details.skipped details.job { opacity:.85; }
 
 DASH_JS = """
 const $ = id => document.getElementById(id);
-const q = $('q'), src = $('src'), agency = $('agency'), sort = $('sort'),
+const q = $('q'), src = $('src'), age = $('age'), type = $('type'), agency = $('agency'), ai = $('ai'), sort = $('sort'),
       count = $('count'), list = $('scored'), empty = $('empty'),
       tiles = [...document.querySelectorAll('.tile[data-view]')];
 let view = 'all';
@@ -293,7 +296,11 @@ function apply() {
     const d = el.dataset, scored = d.scored === '1';
     const ok = (!words || d.text.includes(words))
       && (src.value === 'all' || d.source === src.value)
+      // A job with no posting date can't be shown as recent, so a Posted filter hides it.
+      && (!age.value || (d.days !== '' && +d.days <= +age.value))
+      && (type.value === 'all' || d.type === type.value)
       && (!agency.checked || d.agency !== '1')
+      && (!ai.checked || d.ai === '1')
       && (!scored || views[view](d));
     el.hidden = !ok;
     if (scored && ok) shown++;
@@ -315,15 +322,17 @@ tiles.forEach(t => t.addEventListener('click', () => {
   if (t.dataset.view === 'skipped') { const s = $('skipped'); s.open = true; s.scrollIntoView({behavior: 'smooth'}); return; }
   setView(t.dataset.view);
 }));
-$('reset').addEventListener('click', () => { q.value = ''; src.value = 'all'; agency.checked = false; setView('all'); });
-[q, src, agency].forEach(el => el.addEventListener('input', apply));
+$('reset').addEventListener('click', () => {
+  q.value = ''; src.value = type.value = 'all'; age.value = ''; agency.checked = ai.checked = false; setView('all');
+});
+[q, src, age, type, agency, ai].forEach(el => el.addEventListener('input', apply));
 sort.addEventListener('input', order);
 setView('all');
 
 // "Pull latest jobs": only works when the page is opened by app.py (which runs the pull).
 const pullBtn = $('pull'), panel = $('pulling'), status = $('pull-status'),
       bar = $('pull-bar'), log = $('pull-log'), addForm = $('add-job'), addBtn = $('add-btn');
-let since = 0;
+let since = 0, keepLog = false;
 function showPull(text) { panel.hidden = false; status.textContent = text; }
 function busy(on) { pullBtn.disabled = addBtn.disabled = on; }
 async function watch() {
@@ -345,6 +354,9 @@ async function watch() {
     if (p.failed.length) {
       busy(false);
       showPull('Finished, but failed: ' + p.failed.join(', ') + '. Details below.');
+    } else if (keepLog) {  // research: what it found is in the log, so don't reload over it
+      busy(false);
+      showPull('Done. Details below; the brief is on the job\\'s Notion page.');
     } else {
       showPull('Done. Loading the new list…');
       setTimeout(() => location.reload(), 1200);
@@ -368,12 +380,13 @@ addForm.addEventListener('submit', e => {
   start('/add', JSON.stringify({url: $('add-url').value}));
 });
 async function start(path, body) {
-  busy(true); log.textContent = ''; since = 0;
+  busy(true); log.textContent = ''; since = 0; keepLog = path === '/research';
   showPull('Starting…');
   try {
     const r = await fetch(path, {method: 'POST', body,
       headers: body ? {'X-Jobmax': '1', 'Content-Type': 'application/json'} : {'X-Jobmax': '1'}});
-    if (r.status === 400) { busy(false); showPull((await r.json()).error); return; }
+    const reply = await r.json();
+    if (reply.error) { busy(false); showPull(reply.error); return; }
     if (r.status === 409) showPull('Already running. Following it…');
     watch();
   } catch (e) {
@@ -381,6 +394,58 @@ async function start(path, body) {
     showPull('Could not reach the app. Is python app.py still running?');
   }
 }
+// "Remove: ad closed": first click asks, second click tells the app, which marks the ad closed.
+document.addEventListener('click', async e => {
+  const btn = e.target.closest('[data-remove]');
+  if (!btn) return;
+  if (location.protocol === 'file:') {
+    showPull('Removing a job needs the app running. In the project folder, run: python app.py');
+    return;
+  }
+  if (!btn.classList.contains('armed')) {
+    btn.classList.add('armed'); btn.textContent = 'Click again to remove';
+    return;
+  }
+  btn.disabled = true; btn.textContent = 'Removing…';
+  try {
+    const r = await fetch('/remove', {method: 'POST', body: JSON.stringify({key: btn.dataset.remove}),
+      headers: {'X-Jobmax': '1', 'Content-Type': 'application/json'}});
+    if (!r.ok) throw new Error((await r.json()).error);
+    btn.closest('[data-job]').remove();
+    apply();
+  } catch (err) {
+    btn.disabled = false; btn.classList.remove('armed'); btn.textContent = 'Remove: ad closed';
+    showPull(err.message.startsWith('A pull') || err.message.startsWith('That job') ? err.message
+             : 'Could not reach the app. Is python app.py still running?');
+  }
+});
+// "Pursue anyway" on a skipped job: the app lists it and sends it to Notion, then the page reloads.
+document.addEventListener('click', e => {
+  const btn = e.target.closest('[data-keep]');
+  if (!btn) return;
+  if (location.protocol === 'file:') {
+    showPull('This button needs the app running. In the project folder, run: python app.py');
+    return;
+  }
+  start('/keep', JSON.stringify({key: btn.dataset.keep}));
+  panel.scrollIntoView({behavior: 'smooth'});  // the progress shows at the top
+});
+// "Research company": costs about $1, so the first click asks and the second starts it.
+document.addEventListener('click', e => {
+  const btn = e.target.closest('[data-research]');
+  if (!btn) return;
+  if (location.protocol === 'file:') {
+    showPull('Research needs the app running. In the project folder, run: python app.py');
+    return;
+  }
+  if (!btn.classList.contains('armed')) {
+    btn.classList.add('armed'); btn.textContent = 'Click again: about $1';
+    return;
+  }
+  btn.classList.remove('armed'); btn.textContent = 'Research company';
+  start('/research', JSON.stringify({key: btn.dataset.research}));
+  panel.scrollIntoView({behavior: 'smooth'});  // the progress shows at the top
+});
 // Reopened the page mid-pull? Pick the progress back up.
 if (location.protocol !== 'file:') fetch('/progress').then(r => r.json()).then(p => { if (p.running) watch(); });
 """
@@ -486,16 +551,29 @@ def _job_row(job: dict, result: Result, found: dict | None, agency: bool,
     tags = []
     if result.skipped:
         tags.append(f'<span class="tag bad">{escape(result.knockouts[0][0])}</span>')
+    if result.employment and result.employment != "full_time":
+        tags.append(f'<span class="tag warn" title="Scores lower than full-time for PR">'
+                    f'{escape(result.employment.replace("_", "-"))}</span>')
     if known:
         names = ", ".join(p["name"] for p in known)
         tags.append(f'<span class="tag good" title="Your LinkedIn connections there: {escape(names)}">'
                     f'you know {len(known)}</span>')
+    if result.ai:
+        kind, quote = result.ai
+        cls, label, tip = {
+            "business": ("good", "AI · business side", "a target team or process language, so it reads as 224712"),
+            "ict": ("warn", "AI · ICT risk", "a tech team or ICT language, so it may read as an ICT code"),
+        }.get(kind, ("", "AI", "the ad doesn't show which side of the business it's on"))
+        tags.append(f'<span class="tag {cls}" title="{escape(f"Ad says “{quote}”: {tip}. Doesn’t change the PR score.")}">'
+                    f"{label}</span>")
     if agency:
         tags.append('<span class="tag" title="Recruitment agency: the real employer is hidden">agency</span>')
+    if job.get("kept_by_you"):
+        tags.append('<span class="tag" title="The rules skip this job, but you chose to pursue it">you kept it</span>')
     if result.flags:
         tags.append(f'<span class="tag warn" title="{escape("; ".join(result.flags))}">⚠ check</span>')
     if not result.skipped and result.confidence == "low":
-        tags.append('<span class="tag" title="The ad doesn\'t say which team. Ask in interview.">team unclear</span>')
+        tags.append('<span class="tag" title="The ad doesn\'t say which team.">team unclear</span>')
 
     research = job.get("company_research") or {}
     links = [(job.get("url"), "Open job ad", "btn primary"), (tracker_page, "Track in Notion", "btn"),
@@ -506,6 +584,17 @@ def _job_row(job: dict, result: Result, found: dict | None, agency: bool,
         if url and url not in seen:  # LinkedIn's apply link is often the ad itself
             seen.add(url)
             buttons.append(f'<a class="{cls}" href="{escape(url)}" target="_blank" rel="noopener">{label}</a>')
+    if result.skipped:
+        buttons.append(f'<button class="btn keep" type="button" data-keep="{escape(job["key"])}" '
+                       'title="The rule is wrong for you here? Lists this job with its real PR score and '
+                       'adds it to Notion. The rule stays on it as a warning.">Pursue anyway → Notion</button>')
+    else:
+        buttons.append(f'<button class="btn" type="button" data-research="{escape(job["key"])}" '
+                       'title="Claude researches the company on the web (pain points, artifact ideas, '
+                       '3 people to contact) and writes a brief into its Notion page. About $1; asks first.">'
+                       'Research company</button>')
+    buttons.append(f'<button class="btn remove" type="button" data-remove="{escape(job["key"])}" '
+                   'title="Spotted that the ad has closed? Takes the job off this list.">Remove: ad closed</button>')
 
     if result.skipped:
         why = "".join(f'<div class="reason">{escape(r)}</div><div class="quote">…{escape(q)}…</div>'
@@ -522,8 +611,9 @@ def _job_row(job: dict, result: Result, found: dict | None, agency: bool,
     return (
         f'<details class="job" data-job data-scored="{0 if result.skipped else 1}" '
         f'data-score="{result.total}" data-fit="{-1 if skill_score is None else skill_score}" '
-        f'data-new="{-(days if days is not None else 9999)}" data-source="{escape(job["source"])}" '
-        f'data-agency="{1 if agency else 0}" data-text="{escape(text)}">'
+        f'data-new="{-(days if days is not None else 9999)}" data-days="{"" if days is None else days}" '
+        f'data-type="{escape(result.employment or "unknown")}" data-source="{escape(job["source"])}" '
+        f'data-agency="{1 if agency else 0}" data-ai="{1 if result.ai else 0}" data-text="{escape(text)}">'
         f'<summary><div class="pills">{pills}</div>'
         f'<div><div class="role">{escape(job["role"])}</div><div class="meta">{meta}</div></div>'
         f'<div class="tags">{"".join(tags)}</div><span class="chev" aria-hidden="true">▶</span></summary>'
@@ -588,8 +678,15 @@ def render_dashboard(rows: list[tuple[dict, Result, dict | None, bool, SkillFit 
         '<input type="search" id="q" placeholder="Search company, role or city" aria-label="Search">'
         '<label>Sort <select id="sort"><option value="score">PR score</option>'
         '<option value="fit">Skills fit</option><option value="new">Newest</option></select></label>'
+        '<label>Posted <select id="age"><option value="">Any time</option>'
+        '<option value="1">Last 24 hours</option><option value="3">Last 3 days</option>'
+        '<option value="7">Last 7 days</option><option value="14">Last 14 days</option></select></label>'
+        '<label>Type <select id="type"><option value="all">All</option><option value="full_time">Full-time</option>'
+        '<option value="contract">Contract</option><option value="part_time">Part-time</option>'
+        '<option value="unknown">Not stated</option></select></label>'
         f'<label>Board <select id="src"><option value="all">All</option>{options}</select></label>'
         '<label><input type="checkbox" id="agency"> Hide agencies</label>'
+        '<label><input type="checkbox" id="ai"> AI roles only</label>'
         '<span class="count" id="count"></span></div>',
         '<div id="scored">' + "".join(_job_row(*r, pages.get(r[0]["key"], ""), contact_mix) for r in scored) + "</div>",
         '<p class="empty" id="empty" hidden>No jobs match. <button id="reset">Show all jobs</button></p>',

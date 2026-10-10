@@ -443,3 +443,78 @@ What I decided, and why. Newest at the bottom. One or two lines per decision.
 - Idea from career-ops' liveness check (MIT license); the wording list is a stricter subset of theirs.
 - **Why:** an ad can close on day 10 or stay open past day 30, so age alone is a rough guide. Checking before research saves $0.60+ on a filled role.
 - **Rejected:** treating "couldn't tell" as closed (a blocked request would hide good jobs); checking every ad on every pull (slower, and hard on the boards for no gain).
+
+---
+
+## 2026-09-28 · Closed ads: check daily, and a Remove button
+
+- **Open ads are re-checked once a day, not every 2 days.** ELMO, Aware Super and City of Gold Coast had closed but were still listed, because they'd been checked the day before and the 2-day wait skipped them. A second pull on the same day still skips them.
+- **"Remove: ad closed" button on every job** (needs `python app.py`). Two clicks. It marks the ad closed "by you", so the job leaves the list and fills Notion's Ad closed column on the next sync, and neither the ad check (not even `--all`) nor research will reopen it. It's refused while a pull is running, so the two can't overwrite each other's changes.
+- **Why:** ads close any day, and you sometimes spot a closure first (e.g. an email or a site the checker can't read).
+- **Rejected:** re-checking on every pull (the old reason still holds); deleting the job outright (the Notion row and history would lose their link to it); a browser confirm pop-up (the two-click button does the same job without a dialog).
+
+---
+
+## 2026-09-28 · AI lens: analyst work that also uses AI
+
+- **An AI tag and an "AI roles only" filter on the job list. The PR score is unchanged.** The tag says which way the job leans: *business side* (AI used in a target team or with process language, so 224712), *ICT risk* (a tech team or ICT language), or plain *AI* (can't tell). It reuses the rubric's existing team and language lists.
+- A job counts as AI if AI is in the title or mentioned at least twice, so a single line of company blurb (Infosys "AI-powered core", Fragomen's background-check note) doesn't tag it. The first run tagged 12 listed jobs.
+- **3 new search keywords** in the primary group (and on the Notion page): AI Business Analyst, AI Transformation Analyst, Automation Analyst. The cost is the same (still 20 jobs per board per pull), but the 20 are spread over 11 keywords instead of 8.
+- **Why:** you want analyst work that uses AI, but AI roles split both ways for PR, so "mentions AI" alone must not raise the score.
+- **Rejected:** AI points in the PR score (would reward ICT-flavoured AI roles, and the PR score should only measure PR, as with "niche edge"); a third score (blurs what the scores mean); a separate AI keyword group (the Pull button only searches the primary group, so it would never run).
+
+---
+
+## 2026-09-29 · "Pursue anyway" for skipped jobs
+
+- **A "Pursue anyway → Notion" button on every job in the Skipped list** (needs `python app.py`). One click saves your choice in `data/jobs.json`, then runs the free refresh (ad check → Notion → rebuild), so the job moves to the main list with its real PR score and a "Track in Notion" link.
+- The rule it broke isn't lost: it shows as a ⚠ warning on the card and in Notion's "Why it scores", plus a "you kept it" tag.
+- **Why:** the rules inform your filter, they don't decide for you. When a rule fires wrongly or you want the job anyway, there should be a way in.
+- **Rejected:** giving kept jobs a PR score of 0 (you'd lose the real ranking); turning off the rule in the YAML (changes it for every job, not just this one); a two-click confirm like Remove (keeping a job loses nothing, and Notion's Status "Not pursuing" undoes it in practice).
+
+---
+
+## 2026-10-02 · Research: up to 15 web searches per company
+
+- **Raised from 8 to 15.** The Jetstar brief ran out of searches before checking their other job ads, review sites (Trustpilot, ProductReview, Glassdoor) and finance transformation news, so its pain points were only inferences.
+- Estimate now ~$0.90–1.50 a company. Searches cost $0.01 each, but every one adds result pages Claude has to read, and that's most of the extra cost. It's a ceiling: a company with little online stops early.
+- **Why:** the brief asks for 6 kinds of research plus 3 people, and 8 searches left about one for each. Pain points backed by sources make a better artifact.
+- **Rejected:** a per-run `--searches` option (one more thing to remember for a number that rarely changes); dropping sections from the brief to save searches (reviews and other job ads are where the real pain points come from).
+
+---
+
+## 2026-10-06 · Contract and part-time jobs; Research button on the job list
+
+- **Every pull now runs two extra small searches per board: contract and part-time (10 jobs each).** The main search is by relevance and comes back almost all full-time: 0 part-time in 320 jobs pulled so far. Uses each board's own work-type filter (LinkedIn Contract + Temporary / Part-time; Seek Contract/Temp / Part time). About $0.09 more a pull (~$0.17 in all); the budget guard now assumes up to $0.35. Turn it off with `types: []` under `search.extra_work_types` in the goal file.
+- **The board's "Employment type" field now wins over the ad's wording.** LinkedIn's "Contract" and Seek's "Contract/Temp" matched no rubric phrase, so 12 contract jobs scored as "not stated" (7.5) or as full-time (15) when the ad said "full time hours". They now score as contract (11). The PR scoring itself is unchanged.
+- **"Research company" button on every listed job** (needs `python app.py`). It runs the same research as `commands.research` for that one job. If the job has no Notion row it gets one (Status "Researching"), and the brief goes on that page. Two clicks, because it costs about $1. The log stays on screen afterwards so you can see who it found and what it cost.
+- **Why:** contract and part-time roles still count toward PR (scored lower, not excluded). Research was the one paid step you could only start from the command line.
+- **Rejected:** one bigger search with no filter (relevance would still bury part-time); dropping the full-time search's rows to pay for it (fewer of the best-scoring jobs); a "research again" option on the button (the brief already exists in Notion and a repeat costs another $1; `--refresh` on the command line still does it).
+
+---
+
+## 2026-10-06 · Posted and Type filters; contract / part-time tags
+
+- **"Posted" filter** (any time, last 24 hours, 3, 7 or 14 days) next to the existing "Sort: Newest". **"Type" filter** (full-time, contract, part-time, not stated). Each contract, part-time or casual job gets a tag on its row.
+- A job with no posting date (usually one added from a link) is hidden while a Posted filter is on, since it can't be shown to be recent.
+- **Why:** now that contract and part-time jobs are pulled, you need to see them at a glance and find the freshest ads to apply to early.
+- **Rejected:** a tag on full-time jobs too (most jobs are full-time, so it would only add clutter).
+
+---
+
+## 2026-10-10 · Contract / part-time searches off; "no sponsorship" no longer scores
+
+- **The extra contract and part-time searches are turned off** (`types: []` under `search.extra_work_types`). They made up 35 of the 90 listed jobs, which isn't what you want. Contract and part-time jobs already pulled stay listed until they're 30 days old; the Type filter hides them now. A pull is back to ~$0.08.
+- **A sponsorship phrase in a sentence with "not", "no", "unable", "cannot"… counts as a refusal: 0 points, and the card quotes it under "why it loses points".** Codafication's "Visa sponsorship WILL NOT be offered" had scored the full 25. More "no sponsorship" wordings were added to the citizens-only knockout, so that ad is now skipped like "no visa sponsorship" already was.
+- **Visa numbers count only next to "visa" or "subclass"** ("482 visa", "subclass 482"). A bare "482" matched "employee number 11,482" (First Focus, 77 → 52).
+- **Why:** a refusal scoring as an offer is the worst error the sponsorship check can make. It's 25 points, and it points you at a company that has said no.
+- **Rejected:** deleting the contract/part-time code (it's one line in the goal file to turn back on); hiding contract/part-time jobs already pulled (they still count toward PR, and the Type filter does this already); listing every refusal wording as a phrase (there are too many; the sentence check catches the rest).
+
+---
+
+## 2026-10-10 · Faster pulls; no "Ask in interview" lines
+
+- **LinkedIn and Seek now search at the same time**, so a pull takes as long as the slower board instead of both added together. Together with the contract / part-time searches being off (2 Apify runs instead of 6), the pull step should drop from about 10 minutes to 1–2. The ad check (~1 second an ad, ~3 minutes for 150) and the Notion sync are unchanged.
+- **The "Ask in interview" lines are gone** from the job cards, along with the `questions` section of the goal file. Anything the ad doesn't say still shows under ❓ Unknowns.
+- **Why:** you didn't need the questions on every card, and the Unknowns line already says what's missing.
+- **Rejected:** checking ads at the same time too (LinkedIn is more likely to block a burst of requests, and losing the ad check costs more than 3 minutes).
